@@ -191,6 +191,10 @@
   #qr{display:inline-block;background:#fff;padding:8px;border-radius:8px;margin:4px 0}
   #qr:empty{display:none}
   .warnNote{color:var(--warn);font-size:12px;line-height:1.6}
+  #inviteNote{color:var(--ok);font-size:13px;min-height:1.2em;margin:4px 0 0}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,.85);color:var(--text);
+    border:2px solid var(--ok);border-radius:12px;padding:8px 16px;font-weight:700;z-index:200;display:none}
+  #toast.show{display:block;animation:cardIn .25s}
   table.res{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0}
   table.res td{padding:4px 2px;border-bottom:1px solid var(--line)}
   table.res td:last-child{text-align:right;font-weight:800}
@@ -214,6 +218,7 @@
     <div class="hudItem">🔒行けない席 <b id="hudLock">0</b></div>
     <div class="hudItem">不満 <b id="hudSep">0</b></div>
     <div class="hudItem" id="hudNet" style="display:none"></div>
+    <button class="iconBtn" id="btnInvite" style="display:none" title="相方を招待">📤 招待</button>
     <div class="hudItem">スコア <b id="hudScore">0</b></div>
     <div id="hudRep" title="評判">★★★★★</div>
     <button class="iconBtn" id="btnPause" title="一時停止 (P)">⏸</button>
@@ -248,6 +253,7 @@
 </div>
 
 <div id="heldChip"></div>
+<div id="toast"></div>
 
 <div class="overlay show" id="ovTitle">
   <div class="panel">
@@ -283,6 +289,8 @@
       <div class="roomCode" id="roomCode">----</div>
       <div id="qr"></div>
       <p class="sub" id="roomUrl" style="word-break:break-all"></p>
+      <button class="btn" id="btnShare" style="margin-top:0">📤 招待リンクを送る</button>
+      <p id="inviteNote"></p>
       <p class="warnNote" id="roomWarn"></p>
     </div>
     <p id="roomStatus"></p>
@@ -1606,6 +1614,25 @@ const PEER_PREFIX = 'manseki-annai-';
 
 function roomStatus(t) { $('#roomStatus').innerHTML = t; }
 
+function toast(text) {
+  const t = $('#toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// 招待リンク:スマホは共有メニュー(LINE など)、PC はクリップボードにコピー
+const inviteUrl = () => location.origin + location.pathname + '?room=' + NET.code;
+async function shareInvite() {
+  const url = inviteUrl();
+  const text = `🎭 満席案内係で一緒に案内係をやろう！ 部屋番号 ${NET.code}(リンクをタップで参加できます)`;
+  const note = msg => { $('#inviteNote').textContent = msg; toast(msg); };
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try { await navigator.share({ title: '満席案内係', text, url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); note('✅ 招待リンクをコピーしました。LINE などに貼り付けて送ってね'); }
+  catch (e) { window.prompt('このリンクをコピーして相方に送ってね', url); }
+}
+
 function hostRoom() {
   if (!window.Peer) { alert('通信ライブラリを読み込めませんでした。インターネットに接続して再読み込みしてください。'); return; }
   NET.role = 'host'; S.me = 0;
@@ -1625,13 +1652,13 @@ function hostRoom() {
       ? '⚠ ファイルを直接開いているので、スマホからはこのURLで開けません。<br>Webサーバーで公開するか、タイトル画面で部屋番号を入力して参加してください。'
       : (h === 'localhost' || h === '127.0.0.1') ? '⚠ localhost はスマホから開けません。URLの localhost をこのPCのIPアドレスに変えて開いてください。' : '';
     roomStatus('相方の参加を待っています…(先に始めても、あとから参加できます)');
-    $('#hudNet').style.display = '';
+    $('#hudNet').style.display = ''; $('#btnInvite').style.display = '';
   });
   peer.on('connection', conn => {
     if (NET.conn && NET.conn.open) { conn.on('open', () => conn.close()); return; }
     NET.conn = conn;
     conn.on('open', () => {
-      roomStatus('🎉 相方が参加しました！');
+      roomStatus('🎉 相方が参加しました！'); $('#inviteNote').textContent = '';
       Snd.raw.fanfare();
       if (S.stats) { sendSetup(); fx(planeEl.offsetWidth / 2, S.geo.crossY, '👥 相方が参加しました！', 'good'); }
     });
@@ -1679,13 +1706,15 @@ function joinRoom(code) {
 // ================= ボタン =================
 $('#btnStart').onclick = () => { Snd.init(); $('#ovTitle').classList.remove('show'); newGame(); };
 $('#btnHost').onclick = () => { Snd.init(); hostRoom(); };
+$('#btnShare').onclick = shareInvite;
+$('#btnInvite').onclick = shareInvite;
 $('#btnJoin').onclick = () => { Snd.init(); joinRoom($('#joinCode').value); };
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin').click(); });
 $('#btnRoomStart').onclick = () => { Snd.init(); $('#ovRoom').classList.remove('show'); newGame(); };
 $('#btnRoomCancel').onclick = () => {
   if (NET.role === 'guest' || S.stats) { location.href = location.pathname; return; }   // 参加者・ゲーム後は読み直して初期状態へ
   if (NET.peer) NET.peer.destroy();
-  NET.role = 'solo'; NET.conn = null; NET.peer = null; $('#hudNet').style.display = 'none';
+  NET.role = 'solo'; NET.conn = null; NET.peer = null; $('#hudNet').style.display = 'none'; $('#btnInvite').style.display = 'none';
   $('#ovRoom').classList.remove('show'); $('#ovTitle').classList.add('show');
 };
 $('#btnIntro').onclick = () => { Snd.init(); ovHide('ovIntro'); layout(); S.running = true; last = performance.now(); Snd.bell(); };
