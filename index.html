@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>満席案内係</title>
+<meta name="description" content="劇場の案内係になって、ポンコツなAI案内ロボと一緒にお客様を隙間なく座らせよう。スマホから2人協力プレイもできるブラウザゲーム。">
+<meta property="og:title" content="🎭 満席案内係 〜ポンコツ案内ロボと目指せ満員御礼〜">
+<meta property="og:description" content="劇場の案内係になって、ポンコツなAI案内ロボと一緒にお客様を隙間なく座らせよう。スマホから2人協力プレイもできます。">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#1a0f14; --panel:#2a1820; --line:#4a2a35;
+    --velvet:#7a1626; --velvet2:#a8243a;
+    --gold:#e8c26a; --text:#f6ecd9; --muted:#b9a58e;
+    --ok:#6fdc8c; --warn:#f2c14e; --bad:#ff6b6b; --rogue:#ff4d6d;
+    --s:40px; --tilt:42deg;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif}
+  body{overflow-x:hidden;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  button{font:inherit;cursor:pointer}
+  #app{max-width:1120px;margin:0 auto;padding:8px 16px 24px}
+
+  /* ===== HUD ===== */
+  #hud{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:8px 14px;margin-bottom:8px}
+  #hud .title{font-weight:900;color:var(--gold);margin-right:auto;font-size:17px}
+  .hudItem{font-size:13px;color:var(--muted);white-space:nowrap}
+  .hudItem b{color:var(--text);font-size:18px;margin:0 2px}
+  #hudTime.warn{color:var(--bad);animation:blink .5s infinite}
+  #hudRep{color:var(--gold);font-size:18px;letter-spacing:1px}
+  #hudRep.hit{animation:shake .4s}
+  .iconBtn{background:#3a2330;color:var(--text);border:1px solid #5a3544;border-radius:8px;padding:3px 10px}
+
+  /* ===== 劇場 ===== */
+  #floor{position:relative;background:radial-gradient(ellipse at 50% 35%,#4a1f2c,#1a0f14 75%);
+    border:1px solid var(--line);border-radius:14px;padding:10px 12px 12px;overflow:hidden;
+    perspective:1000px;perspective-origin:50% 25%}
+  /* 2.5D:客席の床を奥に倒し、人やロボは床の上に立てる(ビルボード) */
+  #plane{position:relative;left:50%;transform-style:preserve-3d;transform-origin:50% 100%;
+    transform:scale(var(--k,1)) rotateX(var(--tilt))}
+  #stageWrap,#theater,.row,.block,.seat,#walkerLayer,#robotLayer,#fxPlane{transform-style:preserve-3d}
+  #stageWrap{position:relative;margin:0 auto 12px;width:78%}
+  #curtain{position:absolute;left:4%;right:4%;bottom:60%;height:120px;transform-origin:50% 100%;transform:rotateX(-90deg);
+    background:linear-gradient(rgba(0,0,0,.15),rgba(0,0,0,.45)),repeating-linear-gradient(90deg,#a3203a 0 14px,#6a1020 14px 28px);
+    border-top:10px solid var(--gold);border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:center;
+    color:var(--gold);font-weight:900;letter-spacing:.4em;font-size:18px;text-shadow:0 2px 4px #000}
+  #stage{height:40px;border-radius:0 0 50% 50%/0 0 100% 100%;
+    background:linear-gradient(#f0d182,#a8792c);color:#3a1a0a;font-weight:900;display:flex;
+    align-items:center;justify-content:center;letter-spacing:.5em;font-size:13px;
+    box-shadow:0 6px 26px rgba(232,194,106,.25)}
+  #theater{display:flex;flex-direction:column;align-items:center}
+  .row{display:flex;align-items:stretch}
+  #theater.compact .rowLabel{display:none}
+  .rowLabel{width:16px;margin:0 4px;color:var(--muted);font-size:11px;display:flex;align-items:center;justify-content:center}
+  .block{display:flex;gap:calc(var(--s)*.08);padding:calc(var(--s)*.07) 0}
+  .aisle{width:calc(var(--s)*.75);background:rgba(255,255,255,.045)}
+  .wall{width:calc(var(--s)*.22);background:repeating-linear-gradient(45deg,#3e2a31 0 4px,#261920 4px 8px)}
+  #cross{position:relative;height:calc(var(--s)*.8);margin:0 auto;background:rgba(255,255,255,.045);
+    display:flex;align-items:center;justify-content:center;color:#6d5a52;font-size:11px;letter-spacing:.4em}
+  #backArea{display:grid;grid-template-columns:1fr auto 1fr;align-items:start;min-height:92px}
+  #door{background:#5a3544;border:2px solid var(--gold);border-top:none;color:var(--gold);font-size:12px;
+    padding:4px 0;width:130px;text-align:center;border-radius:0 0 10px 10px;white-space:nowrap}
+
+  .seat{width:var(--s);height:var(--s);position:relative;cursor:pointer;
+    border-radius:calc(var(--s)*.28) calc(var(--s)*.28) calc(var(--s)*.12) calc(var(--s)*.12);
+    background:linear-gradient(var(--velvet2),var(--velvet));box-shadow:inset 0 -4px 0 rgba(0,0,0,.35);
+    display:flex;align-items:center;justify-content:center;font-size:calc(var(--s)*.62);line-height:1;
+    --back:linear-gradient(#c23349,#6a1020)}
+  /* 背もたれ(床から立てる) */
+  .seat::before{content:'';position:absolute;left:5%;right:5%;bottom:0;height:calc(var(--s)*.42);
+    border-radius:calc(var(--s)*.2) calc(var(--s)*.2) 3px 3px;background:var(--back);
+    transform-origin:50% 100%;transform:rotateX(-80deg);box-shadow:inset 0 3px 0 rgba(255,255,255,.18)}
+  /* 座っているお客様(カメラの方を向いて立つ) */
+  .seat .p{position:absolute;left:-20%;right:-20%;bottom:25%;text-align:center;font-size:calc(var(--s)*.72);line-height:1;
+    transform-origin:50% 100%;transform:rotateX(calc(-1*var(--tilt)));pointer-events:none}
+  .seat.occ{background:hsl(var(--h) 55% 72%);box-shadow:inset 0 -4px 0 rgba(0,0,0,.2),0 0 0 2px hsl(var(--h) 65% 50%);
+    --back:linear-gradient(hsl(var(--h) 55% 66%),hsl(var(--h) 45% 42%))}
+  .seat.sep,.seat.unhappy{animation:sepPulse .9s infinite}
+  .seat.sep::after,.seat.unhappy::after{position:absolute;bottom:40%;right:-25%;font-size:calc(var(--s)*.42);
+    transform-origin:50% 100%;transform:rotateX(calc(-1*var(--tilt))) translateY(calc(var(--s)*-.55))}
+  .seat.sep::after{content:'💢'} .seat.unhappy::after{content:'😒'}
+  .seat.urgent{animation-duration:.3s}
+  @keyframes sepPulse{
+    0%,100%{box-shadow:inset 0 -4px 0 rgba(0,0,0,.2),0 0 0 2px var(--bad)}
+    50%{box-shadow:inset 0 -4px 0 rgba(0,0,0,.2),0 0 0 4px var(--bad),0 0 14px var(--bad)}}
+  .seat.resv{outline:2px dashed var(--rc);outline-offset:1px}
+  .seat.targeted{outline:3px solid var(--rc);outline-offset:2px;animation:tgt .45s infinite}
+  @keyframes tgt{50%{outline-color:transparent}}
+  .seat .ghost{opacity:.45;filter:grayscale(.3)}
+  .seat .lock{opacity:.35;font-size:calc(var(--s)*.4)}
+  .seat.stranded{background:linear-gradient(#5a2530,#43161f);--back:linear-gradient(#5a2530,#3a1219)}
+  .seat.prefzone{box-shadow:inset 0 -4px 0 rgba(0,0,0,.35),inset 0 0 0 2px rgba(232,194,106,.8)}
+  .seat.partner{outline:3px dashed var(--pc);outline-offset:2px}
+  .seat.pv-ok{background:#2f7a48;box-shadow:0 0 0 2px var(--ok);--back:#3f9a5c}
+  .seat.pv-bad{background:#7a2f2f;box-shadow:0 0 0 2px var(--bad);--back:#9a3f3f}
+
+  /* ===== ロビー ===== */
+  #lobby{margin-top:6px;border-top:2px dashed #5a3544;padding-top:8px;display:flex;gap:12px;min-height:84px}
+  .lobbyLabel{font-size:11px;color:var(--muted);margin-bottom:4px}
+  #dockWrap{flex-shrink:0}
+  #dock{display:flex;gap:6px;padding:4px;border-radius:10px;background:rgba(255,255,255,.04)}
+  .dockSlot{width:50px;height:74px;border-radius:8px;border:1px dashed #5a3544}
+  #queueWrap{flex:1;min-width:0}
+  #queue{display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow:auto;padding:2px}
+  .card{background:#3a2330;border:2px solid hsl(var(--h) 60% 60%);border-radius:10px;padding:3px 6px 5px;
+    cursor:pointer;min-width:58px;transition:transform .1s}
+  .card.new{animation:cardIn .35s}
+  .card:hover{transform:translateY(-2px);background:#4a2d3d}
+  .card .faces{font-size:21px;white-space:nowrap;line-height:1.15}
+  .card .meta{font-size:10px;color:var(--muted);white-space:nowrap}
+  .tag{display:inline-block;font-size:10px;background:#1a0f14;border-radius:6px;padding:0 4px;margin-left:2px;color:var(--gold)}
+  .card.rogue{border-style:dashed;border-color:var(--rogue)}
+  .card.rogue .tag{color:var(--rogue)}
+  .card .bar{height:5px;background:#1a0f14;border-radius:3px;overflow:hidden;margin-top:2px}
+  .card .bar i{display:block;height:100%;width:100%;background:var(--ok)}
+  .card.rogue .bar i{background:var(--rogue)}
+  .card.low{animation:shake .5s infinite}
+  .emptyQ{color:#6d5a52;font-size:12px;padding:10px}
+
+  /* ===== 歩くお客様・ロボット ===== */
+  #walkerLayer,#robotLayer,#fxPlane,#fxFlat{position:absolute;inset:0;pointer-events:none}
+  .walker{position:absolute;left:0;top:0;width:calc(var(--s)*.9);height:calc(var(--s)*.9);
+    margin:calc(var(--s)*-.9) 0 0 calc(var(--s)*-.45);display:flex;align-items:flex-end;justify-content:center;
+    font-size:calc(var(--s)*.72);line-height:1;z-index:4;transform-origin:50% 100%;will-change:transform}
+  .walker span{animation:bob .3s infinite alternate;filter:drop-shadow(0 3px 2px rgba(0,0,0,.7))}
+  .walker.rogue{pointer-events:auto;cursor:pointer;border-radius:50%;background:rgba(255,77,109,.3);
+    box-shadow:0 0 0 2px var(--rogue),0 0 12px var(--rogue)}
+  @keyframes bob{to{transform:translateY(-3px)}}
+
+  .robot{position:absolute;left:0;top:0;width:44px;height:44px;margin:-54px 0 0 -22px;transform-origin:50% 100%;
+    pointer-events:auto;cursor:pointer;z-index:5;will-change:transform}
+  .robot .body{animation:hover 1.2s ease-in-out infinite alternate}
+  @keyframes hover{to{translate:0 -5px}}
+  .robot .body{width:44px;height:44px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),transparent 50%),var(--rc);
+    display:flex;align-items:center;justify-content:center;font-size:25px;border:2px solid #fff;
+    box-shadow:0 3px 10px rgba(0,0,0,.55)}
+  .robot:hover .body{filter:brightness(1.25);transform:scale(1.08)}
+  .robot .name{position:absolute;top:45px;left:50%;transform:translateX(-50%);font-size:10px;white-space:nowrap;
+    background:rgba(0,0,0,.65);padding:0 4px;border-radius:4px;color:var(--rc)}
+  .robot .bubble{position:absolute;bottom:50px;left:50%;transform:translateX(-50%);background:#fff;color:#222;
+    font-size:12px;padding:4px 8px;border-radius:10px;white-space:nowrap;display:none;font-weight:700;z-index:6}
+  .robot .bubble.show{display:block}
+  .robot.stunned .body{animation:spin .5s linear infinite}
+  .robot.meddling .body::after{content:'❗';position:absolute;top:-14px;right:-8px;font-size:16px}
+
+  /* ===== エフェクト ===== */
+  .fxAnchor{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0;z-index:10}
+  .fxAnchor .fx{left:0;top:calc(var(--s)*-1)}
+  .fx{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:15px;white-space:nowrap;
+    text-shadow:0 2px 4px #000,0 0 2px #000;animation:fxUp 1.4s ease-out forwards;z-index:10}
+  .fx.good{color:var(--ok)} .fx.bad{color:var(--bad)} .fx.meh{color:#ddd} .fx.gold{color:var(--gold);font-size:22px}
+  @keyframes fxUp{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}
+    15%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}100%{opacity:0;transform:translate(-50%,-170%)}}
+  @keyframes blink{50%{opacity:.45}}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-2px)}75%{transform:translateX(2px)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes cardIn{from{opacity:0;transform:translateY(12px) scale(.9)}}
+
+  .walker.net,.robot.net{transition:transform .09s linear}
+  #hudNet{color:#5ce1e6}
+  #heldChip{position:fixed;left:0;top:0;pointer-events:none;z-index:50;font-size:22px;background:rgba(0,0,0,.8);
+    border:2px solid var(--gold);border-radius:10px;padding:2px 6px;display:none;white-space:nowrap}
+  #heldChip small{display:block;font-size:11px;color:var(--bad);font-weight:700}
+  #heldChip .tag{font-size:11px}
+  #help{margin-top:8px;font-size:12px;color:var(--muted);line-height:1.8}
+  #help kbd{background:#3a2330;border:1px solid #5a3544;border-radius:4px;padding:0 4px;font-family:inherit}
+
+  /* ===== オーバーレイ ===== */
+  .overlay{position:fixed;inset:0;background:rgba(10,5,8,.84);display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
+  .overlay.show{display:flex}
+  .panel{background:var(--panel);border:2px solid var(--gold);border-radius:16px;max-width:600px;width:100%;
+    padding:20px 22px;max-height:92vh;overflow:auto}
+  .panel h1{color:var(--gold);margin:0 0 4px;font-size:26px}
+  .panel h2{color:var(--gold);margin:0 0 10px;font-size:21px}
+  .panel p,.panel li{line-height:1.7;font-size:14px}
+  .panel ul{padding-left:1.2em;margin:8px 0}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .btn{background:linear-gradient(var(--gold),#b8893a);color:#2a1308;border:none;border-radius:10px;padding:10px 26px;font-weight:900;font-size:16px;margin-top:10px}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.alt{background:#3a2330;color:var(--gold);border:2px solid var(--gold)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .modes{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .joinRow{display:flex;gap:6px;align-items:center;margin-top:10px}
+  .joinRow input{width:110px;font:inherit;font-size:20px;font-weight:900;letter-spacing:.2em;text-align:center;
+    background:#1a0f14;color:var(--text);border:2px solid var(--line);border-radius:10px;padding:7px 6px}
+  .roomCode{font-size:48px;font-weight:900;letter-spacing:.25em;color:var(--gold);margin:6px 0}
+  #qr{display:inline-block;background:#fff;padding:8px;border-radius:8px;margin:4px 0}
+  #qr:empty{display:none}
+  .warnNote{color:var(--warn);font-size:12px;line-height:1.6}
+  table.res{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0}
+  table.res td{padding:4px 2px;border-bottom:1px solid var(--line)}
+  table.res td:last-child{text-align:right;font-weight:800}
+  .plus{color:var(--ok)} .minus{color:var(--bad)}
+  .rank{font-size:48px;font-weight:900;color:var(--gold);float:right;line-height:1}
+  .robotStats{font-size:13px;color:var(--muted);margin-top:8px}
+
+  @media (max-width:640px){
+    #hud .title{width:100%}
+    .dockSlot{width:46px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="title">🎭 満席案内係</div>
+    <div class="hudItem">公演 <b id="hudShow">1</b></div>
+    <div class="hudItem">開演まで <b id="hudTime">--</b>秒</div>
+    <div class="hudItem">空席 <b id="hudEmpty">0</b></div>
+    <div class="hudItem">🔒行けない席 <b id="hudLock">0</b></div>
+    <div class="hudItem">不満 <b id="hudSep">0</b></div>
+    <div class="hudItem" id="hudNet" style="display:none"></div>
+    <div class="hudItem">スコア <b id="hudScore">0</b></div>
+    <div id="hudRep" title="評判">★★★★★</div>
+    <button class="iconBtn" id="btnPause" title="一時停止 (P)">⏸</button>
+    <button class="iconBtn" id="btnMute" title="サウンド">🔊</button>
+  </header>
+
+  <main id="floor">
+    <div id="plane">
+      <div id="stageWrap"><div id="curtain">本日の公演</div><div id="stage">STAGE</div></div>
+      <div id="theater"></div>
+      <div id="cross">通 路</div>
+      <div id="backArea">
+        <div id="dockWrap"><div class="lobbyLabel">🤖 ロボ待機所</div><div id="dock"></div></div>
+        <div id="door">🚪 入口・出口</div>
+        <div></div>
+      </div>
+      <div id="walkerLayer"></div>
+      <div id="robotLayer"></div>
+      <div id="fxPlane"></div>
+    </div>
+    <div id="lobby">
+      <div id="queueWrap"><div class="lobbyLabel">🎟 ロビー(お待ちのお客様)</div><div id="queue"></div></div>
+    </div>
+    <div id="fxFlat"></div>
+  </main>
+
+  <div id="help">
+    🖱 お客様カードをクリック → 席をクリックで案内 ／ 座っているお客様をクリックで移動(通路まで出られる人だけ) ／
+    <b>🤖 ロボット・🙉 勝手に歩くお客様はクリックでストップ！</b> ／ <kbd>右クリック</kbd>・<kbd>Esc</kbd> でキャンセル ／ <kbd>P</kbd> 一時停止<br>
+    📱 スマホ：席を1回タップで位置確認、同じ席をもう一度タップで決定
+  </div>
+</div>
+
+<div id="heldChip"></div>
+
+<div class="overlay show" id="ovTitle">
+  <div class="panel">
+    <h1>🎭 満席案内係</h1>
+    <p class="sub">〜 ポンコツ案内ロボと目指せ満員御礼 〜</p>
+    <p>あなたは劇場の案内係。開演までにお客様を<b>隙間なく</b>座らせましょう！</p>
+    <ul>
+      <li>お客様は<b>入口から通路を歩いて</b>席に向かいます。<b>通路側の席が埋まると、その奥には入れません</b>(🔒)。<b>奥(壁側)から詰めて</b>案内しよう。</li>
+      <li>グループは<b>同じ列・同じブロックに横並び</b>で座りたがります。</li>
+      <li>希望のあるお客様もいます:<b>🚪後ろ希望</b>(子連れ・出口に近い後ろ2列)、<b>⭐前列希望</b>(前2列)、<b>🦯通路側希望</b>(通路に面した席)。希望と違うと😒不満がたまって帰ってしまいます。</li>
+      <li><b>🙉マイペース客</b>は案内を待たずに勝手に席へ向かいます。歩いているところを<b>クリックで呼び止めて</b>、ちゃんと案内しよう。</li>
+      <li>同僚の<b>AI案内ロボ</b>も手伝ってくれますが、時々<b>ポンコツ</b>です(通路側から座らせる／ど真ん中に置く／グループをバラバラにする…)。ロボが向かう席は<b>点線の枠</b>で予告されるので、変だと思ったら<b>ロボをクリックして阻止！</b></li>
+      <li>お客様に帰られると<b>評判 ★</b> が減り、0でゲームオーバー。開演時に<b>満席</b>なら大ボーナス＆★回復！</li>
+    </ul>
+    <p class="sub" id="bestLine"></p>
+    <div class="modes">
+      <button class="btn" id="btnStart">ひとりで遊ぶ</button>
+      <button class="btn alt" id="btnHost">👥 2人で遊ぶ(部屋を作る)</button>
+    </div>
+    <div class="joinRow">
+      <span class="sub" style="margin:0">部屋に参加:</span>
+      <input id="joinCode" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">
+      <button class="btn alt" id="btnJoin" style="margin-top:0">参加</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ovRoom">
+  <div class="panel" style="text-align:center">
+    <h2 id="roomTitle">👥 2人で遊ぶ</h2>
+    <div id="roomHost">
+      <p class="sub">スマホやもう1台のPCで<b>QRコードを読む</b>か、タイトル画面で<b>部屋番号を入力</b>して参加してね。<br>相方はゲームの途中からでも参加できます。</p>
+      <div class="roomCode" id="roomCode">----</div>
+      <div id="qr"></div>
+      <p class="sub" id="roomUrl" style="word-break:break-all"></p>
+      <p class="warnNote" id="roomWarn"></p>
+    </div>
+    <p id="roomStatus"></p>
+    <button class="btn" id="btnRoomStart">開場する</button>
+    <button class="btn alt" id="btnRoomCancel">やめる</button>
+  </div>
+</div>
+
+<div class="overlay" id="ovIntro">
+  <div class="panel">
+    <h2 id="introTitle"></h2>
+    <div id="introBody"></div>
+    <button class="btn" id="btnIntro">開場！</button>
+  </div>
+</div>
+
+<div class="overlay" id="ovResult">
+  <div class="panel">
+    <div class="rank" id="resRank"></div>
+    <h2 id="resTitle"></h2>
+    <p class="sub" id="resSub"></p>
+    <table class="res" id="resTable"></table>
+    <div class="robotStats" id="resRobots"></div>
+    <button class="btn" id="btnNext">次の公演へ</button>
+  </div>
+</div>
+
+<div class="overlay" id="ovPause">
+  <div class="panel" style="text-align:center">
+    <h2>⏸ 一時停止中</h2>
+    <button class="btn" id="btnResume">再開</button>
+  </div>
+</div>
+
+<div class="overlay" id="ovOver">
+  <div class="panel">
+    <h2>😱 評判が地に落ちた…</h2>
+    <p id="overBody"></p>
+    <button class="btn" id="btnRetry">もう一度</button>
+  </div>
+</div>
+
+<!-- 2人プレイ用:PeerJS(WebRTC)と QRコード。読み込めなくても1人プレイは遊べる -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" async></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" async></script>
+<script>
+'use strict';
+// ================= ユーティリティ =================
+const $ = s => document.querySelector(s);
+const div = (cls, txt) => { const d = document.createElement('div'); if (cls) d.className = cls; if (txt != null) d.textContent = txt; return d; };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const K = (r, b, i) => r + '-' + b + '-' + i;
+const KC = c => K(c.r, c.b, c.i);
+const range = (r, b, st, k) => Array.from({ length: k }, (_, j) => ({ r, b, i: st + j }));
+
+const floorEl = $('#floor'), planeEl = $('#plane'), theaterEl = $('#theater'), queueEl = $('#queue'), walkerLayer = $('#walkerLayer'),
+      robotLayer = $('#robotLayer'), fxPlane = $('#fxPlane'), fxFlat = $('#fxFlat'), dockEl = $('#dock'), chipEl = $('#heldChip'),
+      crossEl = $('#cross'), doorEl = $('#door'), curtainEl = $('#curtain');
+
+// 2.5D:床の傾き(度)。立っているもの(人・ロボ・文字)は逆向きに回して正面を向かせる
+const TILT = 42;
+document.documentElement.style.setProperty('--tilt', TILT + 'deg');
+const STAND = `rotateX(${-TILT}deg)`;
+
+const FACES = ['👨','👩','🧑','👱','🧔','👲','🧕','🤠','👸','🧓'];
+const FACES_KID = ['👶','👦','👧'];
+const FACES_OLD = ['👴','👵'];
+const ROWNAMES = 'ABCDEFGHIJ';
+const SEP_LIMIT = 15;   // バラバラのまま耐えられる秒数
+const PREF_LIMIT = 25;  // 希望と違う席で耐えられる秒数
+const PLAYER_COLORS = ['#e8c26a', '#5ce1e6'], ROGUE_COLOR = '#ff4d6d';   // P1(ホスト)・P2(参加者)
+const SD = 48;   // 設計上の席サイズ(px)。床ごと拡大縮小するので、どの端末でも床の座標が同じになる
+
+const PREFS = {
+  exit:  { icon: '🚪', label: '後ろ希望',   desc: '子連れ。出口に近い後ろ2列がいい' },
+  front: { icon: '⭐', label: '前列希望',   desc: 'ファン。前2列がいい' },
+  aisle: { icon: '🦯', label: '通路側希望', desc: '通路に面した席がいい' },
+};
+
+// ロボット同僚(iq はポンコツ倍率)
+const ROBOTS = [
+  { name: 'ロボ太',   color: '#4fc3f7', iq: 0.7 },
+  { name: 'ガチャ子', color: '#ff8a65', iq: 1.0 },
+  { name: 'ポンコ2号', color: '#c77dff', iq: 1.6 },
+  { name: 'メカ次郎', color: '#9ccc65', iq: 1.1 },
+];
+const LINES = {
+  smart:  ['ぴったりです！', 'お席はこちら〜', '奥から詰めました！', 'ナイス配置！'],
+  aisle:  ['通路側は出入りしやすいですよ！', '入口に近い方が楽ですよね！', '手前からどんどん座りましょう！'],
+  center: ['ど真ん中が一番よく見えます！', '真ん中こそ特等席！', '広々どうぞ〜'],
+  split:  ['たまには離れて座るのもいいですよね！', '自由席です！', 'ソーシャルディスタンス！'],
+  meddle: ['こちらの方が快適です！', 'お引越し完了！', 'よかれと思って！'],
+  stopped:['えっ？', 'ピピッ…停止します', 'ごめんなさい〜', 'エラー…反省中'],
+  noseat: ['🤔 入れる席がない…', '奥の席に行けないよ〜', '席を詰めてほしいな'],
+  idle:   ['ご用ですか？', 'ピポパ？', 'がんばってます！', '次はうまくやります'],
+};
+
+// ================= サウンド (Web Audio で生成) =================
+const Snd = {
+  ctx: null, on: true,
+  init() { if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; } }
+           if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  tone(f, dur = .1, type = 'sine', vol = .12, slide = 0) {
+    if (!this.on || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, f + slide), t + dur);
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+      o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + dur + .02);
+    } catch (e) {}
+  },
+  seat()  { this.tone(660, .08, 'triangle'); setTimeout(() => this.tone(880, .1, 'triangle'), 60); },
+  pick()  { this.tone(520, .06, 'square', .05); },
+  stop()  { this.tone(320, .3, 'sawtooth', .08, -220); },
+  bad()   { this.tone(140, .22, 'square', .07); },
+  angry() { this.tone(220, .45, 'sawtooth', .1, -140); },
+  robot() { this.tone(1200, .04, 'square', .035); setTimeout(() => this.tone(900, .04, 'square', .035), 50); },
+  door()  { this.tone(1046, .12, 'sine', .05); },
+  rogue() { this.tone(700, .08, 'square', .05); setTimeout(() => this.tone(500, .12, 'square', .05), 80); },
+  fanfare() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, .28, 'triangle', .12), i * 120)); },
+  bell()  { this.tone(880, .7, 'sine', .12); },
+};
+
+Snd.raw = {};
+['seat', 'pick', 'stop', 'bad', 'angry', 'robot', 'door', 'rogue', 'fanfare', 'bell'].forEach(n => {
+  const f = Snd[n].bind(Snd); Snd.raw[n] = f;
+  Snd[n] = () => { f(); if (netOn()) NET.ev.push(['s', n]); };
+});
+
+// ================= ステート =================
+const S = {
+  show: 1, score: 0, rep: 5, running: false, paused: false, over: false,
+  cfg: null, grid: [], resv: [], seatEls: [], rowEls: [], aisleEls: [], geo: null,
+  groups: [], groupMap: new Map(), queue: [], arrivals: [], robots: [],
+  hands: [null, null], me: 0, partnerPv: null, preview: null, elapsed: 0, time: 0, dirty: true, stats: null, nextGid: 1,
+  seatSize: SD, emptyCount: 0, lockCount: 0, sepCount: 0, lastPointer: 'mouse', cells: [], cellIndex: new Map(),
+};
+const myHand = () => S.hands[S.me];
+
+// ================= 通信(2人プレイ) =================
+// role: 'solo' | 'host'(ゲームを動かす側) | 'guest'(画面を受け取って操作だけ送る側)
+const NET = { role: 'solo', peer: null, conn: null, code: '', ev: [], lastSend: 0, ready: false,
+              walkers: new Map(), qk: '', al: 0 };
+const netOn = () => NET.role === 'host' && NET.conn && NET.conn.open;
+
+// aisles[p] … p番目の仕切り(ブロックpの左 / ブロックp-1の右)が通路なら1、壁なら0
+function levelCfg(n) {
+  const T = [null,
+    { rows: 4, blocks: [4, 4],    aisles: [0, 1, 0],    robots: 1, dumb: .25, meddle: 0,    prefs: 0,   aislePref: false, rogue: 0,   time: 75,  patience: 28, walk: 150 },
+    { rows: 5, blocks: [5, 5],    aisles: [0, 1, 0],    robots: 2, dumb: .27, meddle: 0,    prefs: .25, aislePref: false, rogue: 0,   time: 85,  patience: 26, walk: 160 },
+    { rows: 5, blocks: [3, 6, 3], aisles: [0, 1, 1, 0], robots: 2, dumb: .30, meddle: 0,    prefs: .3,  aislePref: true,  rogue: .12, time: 90,  patience: 24, walk: 170 },
+    { rows: 6, blocks: [4, 6, 4], aisles: [0, 1, 1, 0], robots: 3, dumb: .32, meddle: .03,  prefs: .35, aislePref: true,  rogue: .15, time: 100, patience: 23, walk: 180 },
+    { rows: 6, blocks: [5, 6, 5], aisles: [0, 1, 1, 0], robots: 3, dumb: .36, meddle: .04,  prefs: .4,  aislePref: true,  rogue: .18, time: 105, patience: 22, walk: 190 },
+  ];
+  if (n < T.length) return { ...T[n] };
+  const k = n - 5;
+  return { rows: 7, blocks: [5, 7, 5], aisles: [0, 1, 1, 0], robots: 4, dumb: Math.min(.55, .36 + .03 * k),
+           meddle: Math.min(.08, .04 + .008 * k), prefs: .45, aislePref: true, rogue: Math.min(.3, .2 + .02 * k),
+           time: 115, patience: Math.max(15, 21 - k), walk: Math.min(260, 195 + 8 * k) };
+}
+
+// ================= 劇場の構築 =================
+function buildTheater() {
+  const { rows, blocks, aisles } = S.cfg;
+  theaterEl.innerHTML = ''; S.grid = []; S.resv = []; S.seatEls = []; S.rowEls = []; S.aisleEls = [];
+  S.cells = []; S.cellIndex = new Map();   // 通信用の席の通し番号
+  for (let r = 0; r < rows; r++) {
+    const rowEl = div('row');
+    rowEl.append(div('rowLabel', ROWNAMES[r]));
+    S.grid[r] = []; S.resv[r] = []; S.seatEls[r] = [];
+    for (let p = 0; p <= blocks.length; p++) {
+      const sep = div(aisles[p] ? 'aisle' : 'wall'); rowEl.append(sep);
+      if (r === 0) S.aisleEls[p] = aisles[p] ? sep : null;
+      if (p === blocks.length) break;
+      const len = blocks[p], bEl = div('block');
+      S.grid[r][p] = new Array(len).fill(0); S.resv[r][p] = new Array(len).fill(0); S.seatEls[r][p] = [];
+      for (let i = 0; i < len; i++) {
+        const s = div('seat'); s.dataset.r = r; s.dataset.b = p; s.dataset.i = i;
+        bEl.append(s); S.seatEls[r][p].push(s);
+        S.cellIndex.set(K(r, p, i), S.cells.length); S.cells.push({ r, b: p, i });
+      }
+      rowEl.append(bEl);
+    }
+    rowEl.append(div('rowLabel', ROWNAMES[r]));
+    theaterEl.append(rowEl); S.rowEls.push(rowEl);
+  }
+  layout();
+}
+
+function layout() {
+  if (!S.cfg) return;
+  document.documentElement.style.setProperty('--s', SD + 'px');
+  S.seatSize = SD;
+  const rowW = S.rowEls.length ? S.rowEls[0].offsetWidth : 600;
+  crossEl.style.width = rowW + 'px';
+  const W = Math.max(rowW + 40, 130 + 2 * (S.cfg.robots * 56 + 20));   // 客席と、入口の横のロボ待機所が収まる幅
+  planeEl.style.width = W + 'px'; planeEl.style.marginLeft = (-W / 2) + 'px';
+  // 横幅に合わせて拡大縮小し、縦に入りきらなければさらに縮める
+  let k = Math.min(1.3, (floorEl.clientWidth - 24) / W);
+  planeEl.style.setProperty('--k', k); fitPlane();
+  const pr = planeEl.getBoundingClientRect(), top = Math.min(pr.top, curtainEl.getBoundingClientRect().top);
+  const target = Math.max(220, window.innerHeight - 280);
+  if (pr.bottom - top > target) { k *= target / (pr.bottom - top); planeEl.style.setProperty('--k', k); fitPlane(); }
+  computeGeo();
+  S.dirty = true;
+}
+
+// 倒した床の見た目の上端(幕の上)が #floor の上端に来るように詰める
+function fitPlane() {
+  for (let n = 0; n < 2; n++) {
+    const top0 = floorEl.getBoundingClientRect().top + 10;
+    const minTop = Math.min(curtainEl.getBoundingClientRect().top, planeEl.getBoundingClientRect().top);
+    planeEl.style.marginTop = (parseFloat(planeEl.style.marginTop || 0) + top0 - minTop) + 'px';
+  }
+}
+
+// 画面上の座標(#floor 基準):ロビーのカードなど平面のUI用
+function relCenter(el) {
+  const fr = floorEl.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: r.left - fr.left + r.width / 2, y: r.top - fr.top + r.height / 2 };
+}
+// 床の上の座標(#plane 基準・傾ける前):通路・座席・歩く人・ロボはすべてこの座標で動く
+function localCenter(el) {
+  let x = el.offsetWidth / 2, y = el.offsetHeight / 2;
+  for (let n = el; n && n !== planeEl; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
+  return { x, y };
+}
+function computeGeo() {
+  if (!S.rowEls.length) return;
+  S.geo = {
+    rowY: S.rowEls.map(el => localCenter(el).y),
+    seatX: S.seatEls[0].map(blk => blk.map(el => localCenter(el).x)),
+    aisleX: S.aisleEls.map(el => el ? localCenter(el).x : null),
+    crossY: localCenter(crossEl).y,
+    door: localCenter(doorEl),
+  };
+}
+function cellsCenter(cells) {
+  const G = S.geo; let x = 0, y = 0;
+  cells.forEach(c => { x += G.seatX[c.b][c.i]; y += G.rowY[c.r]; });
+  return { x: x / cells.length, y: y / cells.length };
+}
+
+// ================= お客様グループ =================
+function makeGroups() {
+  // 各列・各ブロックを分割してグループを作る → 理論上は必ず満席にできる
+  const W = [[1, .18], [2, .42], [3, .24], [4, .16]];
+  const out = [];
+  for (let r = 0; r < S.cfg.rows; r++) {
+    S.cfg.blocks.forEach((L, b) => {
+      let pos = 0;
+      while (pos < L) {
+        let x = Math.random(), k = 1;
+        for (const [sz, w] of W) { if ((x -= w) <= 0) { k = sz; break; } }
+        k = Math.min(k, L - pos);
+        out.push(newGroup(k, pickPref(r, b, pos, k)));
+        pos += k;
+      }
+    });
+  }
+  return shuffle(out);
+}
+
+// 希望は「その分割で座れる位置」に合わせて付ける → 希望込みでも満席にできる
+function pickPref(r, b, st, k) {
+  const c = S.cfg;
+  if (Math.random() >= c.prefs) return null;
+  const o = [];
+  if (r >= c.rows - 2 && k >= 2) o.push('exit');
+  if (r <= 1) o.push('front');
+  if (c.aislePref && ((st === 0 && c.aisles[b]) || (st + k === c.blocks[b] && c.aisles[b + 1]))) o.push('aisle');
+  return o.length ? pick(o) : null;
+}
+
+function newGroup(k, pref) {
+  const id = S.nextGid++;
+  let hue = (id * 137.5 + 40) % 360;
+  if (hue > 330 || hue < 12) hue = (hue + 45) % 360;   // 赤い空席と紛らわしい色は避ける
+  const faces = Array.from({ length: k }, () => pick(FACES));
+  if (pref === 'exit') faces[k - 1] = pick(FACES_KID);
+  if (pref === 'front') faces[0] = '🤩';
+  if (pref === 'aisle') faces[0] = pick(FACES_OLD);
+  const rogue = !pref && Math.random() < S.cfg.rogue;
+  return buildGroup({ id, size: k, faces, hue, pref, rogue });
+}
+
+function buildGroup({ id, size: k, faces, hue, pref, rogue }) {
+  const g = { id, size: k, faces, hue, pref, rogue,
+              state: 'pending', patience: S.cfg.patience + k * 1.5, selfT: 0, selfMax: 0,
+              seats: [], target: [], sides: [], walkers: [], sepTime: 0, prefTime: 0,
+              origSeats: null, from: null, fixing: false, meddled: false };
+  g.maxPatience = g.patience;
+  if (rogue) { g.selfMax = g.selfT = 3 + Math.random() * 3; }
+  const c = div('card' + (rogue ? ' rogue' : '')); c.style.setProperty('--h', hue); c.dataset.gid = id;
+  const tag = pref ? `<span class="tag">${PREFS[pref].icon}${PREFS[pref].label}</span>` : rogue ? '<span class="tag">🙉マイペース</span>' : '';
+  c.innerHTML = `<div class="faces">${faces.join('')}</div><div class="meta">${k}名様${tag}</div><div class="bar"><i></i></div>`;
+  c.title = pref ? PREFS[pref].desc : rogue ? '案内を待たずに勝手に座りに行きます' : '';
+  c.addEventListener('click', e => {
+    e.stopPropagation(); Snd.init();
+    if (S.running && !S.paused && g.state === 'queue') act('hold', { gid: g.id });
+  });
+  g.card = c; g.barEl = c.querySelector('.bar i');
+  S.groupMap.set(id, g);
+  return g;
+}
+
+function renderQueue() {
+  if (S.queue.length) queueEl.replaceChildren(...S.queue.map(g => g.card));
+  else queueEl.replaceChildren(div('emptyQ', S.arrivals.length ? 'お客様の到着を待っています…' : '全員ご来場済み'));
+}
+
+function removeFromQueue(g) {
+  const qi = S.queue.indexOf(g);
+  if (qi >= 0) { S.queue.splice(qi, 1); g.card.remove(); renderQueue(); }
+}
+
+function toQueueFront(g) {
+  g.state = 'queue'; g.origSeats = null; g.from = null; g.meddled = false; g.fixing = false;
+  if (g.rogue) g.selfT = Math.max(g.selfT, 3);
+  S.queue.unshift(g); renderQueue();
+}
+
+// ================= 席と通り道のルール =================
+const freeCell = (r, b, i) => S.grid[r][b][i] === 0 && S.resv[r][b][i] === 0;
+function blockedAt(r, b, i, own, extra) {
+  const k = K(r, b, i);
+  if (own && own.has(k)) return false;
+  if (extra && extra.has(k)) return true;
+  return !freeCell(r, b, i);
+}
+// side: -1 = 左の通路から / 1 = 右の通路から。手前の席が全部空いていれば入れる
+function reachFrom(r, b, i, side, own, extra) {
+  const L = S.grid[r][b].length;
+  if (side < 0) {
+    if (!S.cfg.aisles[b]) return false;
+    for (let j = 0; j < i; j++) if (blockedAt(r, b, j, own, extra)) return false;
+    return true;
+  }
+  if (!S.cfg.aisles[b + 1]) return false;
+  for (let j = i + 1; j < L; j++) if (blockedAt(r, b, j, own, extra)) return false;
+  return true;
+}
+function reachSide(r, b, i, own, extra) {
+  const L = S.grid[r][b].length;
+  const l = reachFrom(r, b, i, -1, own, extra), rr = reachFrom(r, b, i, 1, own, extra);
+  if (l && rr) return i < L - 1 - i ? -1 : 1;
+  return l ? -1 : rr ? 1 : 0;
+}
+const aisleIdx = (b, side) => side < 0 ? b : b + 1;
+
+// その席に案内できるか? (空いている・通路から入れる・歩いている人の通り道をふさがない)
+function checkPlacement(cells) {
+  const set = new Set(cells.map(KC));
+  for (const c of cells) if (!freeCell(c.r, c.b, c.i)) return { ok: false, reason: 'その席は空いていません' };
+  const sides = [];
+  for (const c of cells) {
+    const s = reachSide(c.r, c.b, c.i, set, null);
+    if (!s) return { ok: false, reason: '🔒 手前がふさがっていて入れません' };
+    sides.push(s);
+  }
+  for (const W of S.groups) {
+    if (W.state !== 'walking') continue;
+    const own = new Set(W.target.map(KC));
+    for (let j = 0; j < W.target.length; j++) {
+      const c = W.target[j];
+      if (W.walkers[j].done || !cells.some(n => n.r === c.r && n.b === c.b)) continue;
+      if (!reachFrom(c.r, c.b, c.i, W.sides[j], own, set)) return { ok: false, reason: '🚶 歩いているお客様の通り道です' };
+    }
+  }
+  return { ok: true, sides };
+}
+
+function isContig(cells) {
+  if (cells.length <= 1) return true;
+  const s = [...cells].sort((a, b) => a.i - b.i);
+  return s.every((c, j) => c.r === s[0].r && c.b === s[0].b && c.i === s[0].i + j);
+}
+const together = g => isContig(g.seats);
+
+function prefOK(g, cells) {
+  if (!g.pref) return true;
+  const c = S.cfg;
+  if (g.pref === 'exit') return cells.every(x => x.r >= c.rows - 2);
+  if (g.pref === 'front') return cells.every(x => x.r <= 1);
+  if (g.pref === 'aisle') return cells.some(x => (x.i === 0 && c.aisles[x.b]) || (x.i === c.blocks[x.b] - 1 && c.aisles[x.b + 1]));
+  return true;
+}
+const discontent = g => !together(g) || !prefOK(g, g.seats);
+
+function seatGroup(g, cells, silent) {
+  cells.forEach(c => S.grid[c.r][c.b][c.i] = g.id);
+  g.seats = cells.map(c => ({ ...c })); g.state = 'seated'; g.origSeats = null; g.meddled = false;
+  if (together(g)) g.sepTime = 0;
+  if (prefOK(g, g.seats)) g.prefTime = 0;
+  if (!silent) {
+    Snd.seat();
+    const p = cellsCenter(g.seats.slice(0, 1));
+    if (!together(g)) { Snd.bad(); fx(p.x, p.y - 20, 'バラバラ！💢', 'bad'); }
+    else if (!prefOK(g, g.seats)) { Snd.bad(); fx(p.x, p.y - 20, `😒 ${PREFS[g.pref].label}なのに…`, 'bad'); }
+  }
+  S.dirty = true;
+}
+
+function unseat(g) {
+  g.seats.forEach(c => S.grid[c.r][c.b][c.i] = 0);
+  g.seats = []; S.dirty = true;
+}
+
+function groupLeaves(g, msg) {
+  let pos;
+  if (g.state === 'queue') { fxFlatAt(g.card, '😡 ' + msg, 'bad'); removeFromQueue(g); }
+  else if (g.state === 'seated') { pos = cellsCenter(g.seats); unseat(g); fx(pos.x, pos.y, '😡 ' + msg, 'bad'); }
+  g.state = 'left'; S.stats.left++;
+  Snd.angry(); loseRep(1);
+}
+
+function loseRep(n) {
+  S.rep = Math.max(0, S.rep - n);
+  const el = $('#hudRep'); el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit');
+  if (S.rep <= 0 && S.running) gameOver();
+}
+
+// ================= 席の候補と判断 =================
+function candidates(g) {
+  const out = [], k = g.size, { aisles } = S.cfg;
+  S.grid.forEach((row, r) => row.forEach((blk, b) => {
+    const L = blk.length;
+    const before = new Set();
+    for (let i = 0; i < L; i++) if (freeCell(r, b, i) && !reachSide(r, b, i, null, null)) before.add(i);
+    let st = -1;
+    for (let i = 0; i <= L; i++) {
+      const f = i < L && freeCell(r, b, i);
+      if (f && st < 0) st = i;
+      if (!f && st >= 0) {
+        const s0 = st, len = i - st; st = -1;
+        for (let s = s0; s + k <= s0 + len; s++) {
+          const cells = range(r, b, s, k);
+          if (!checkPlacement(cells).ok) continue;
+          const set = new Set(cells.map(KC));
+          let stranded = 0;   // この配置のせいで新たに行けなくなる席の数
+          for (let j = 0; j < L; j++) {
+            if (j >= s && j < s + k) continue;
+            if (freeCell(r, b, j) && !before.has(j) && !reachSide(r, b, j, null, set)) stranded++;
+          }
+          const lo = s === s0, hi = s + k === s0 + len;
+          const gaps = (!lo && s - s0 === 1 ? 1 : 0) + (!hi && s0 + len - (s + k) === 1 ? 1 : 0);
+          const touchAisle = (s === 0 && aisles[b]) || (s + k === L && aisles[b + 1]);
+          out.push({ cells, r, stranded, exact: len === k, lo, hi, gaps, touchAisle, pref: prefOK(g, cells) });
+        }
+      }
+    }
+  }));
+  return out;
+}
+
+// 賢い判断:希望を守る・奥から詰める・ぴったり埋める
+function smartPlan(g) {
+  let best = null, bs = -1e9;
+  for (const c of candidates(g)) {
+    if (g.pref && !c.pref) continue;
+    let sc = c.exact ? 100 : (c.lo || c.hi) ? 40 : -30;
+    sc -= c.gaps * 12 + c.stranded * 70;
+    if (!g.pref) sc -= c.r * 1.5;
+    sc += Math.random() * 3;
+    if (sc > bs) { bs = sc; best = c.cells; }
+  }
+  return best;
+}
+// ポンコツ判断①:通路側から座らせて奥をふさぐ
+function aislePlan(g) {
+  const cs = candidates(g).filter(c => c.stranded > 0 && c.touchAisle);
+  return cs.length ? pick(cs).cells : null;
+}
+// ポンコツ判断②:ど真ん中に置いて隙間を作る
+function centerPlan(g) {
+  const cs = candidates(g).filter(c => !c.lo && !c.hi);
+  return cs.length ? pick(cs).cells : null;
+}
+// ポンコツ判断③:グループをバラバラの席に座らせる
+function splitPlan(g) {
+  const free = [];
+  S.grid.forEach((row, r) => row.forEach((blk, b) => blk.forEach((v, i) => { if (freeCell(r, b, i)) free.push({ r, b, i }); })));
+  if (free.length < g.size) return null;
+  for (let t = 0; t < 30; t++) {
+    shuffle(free);
+    const c = free.slice(0, g.size);
+    if (!isContig(c) && checkPlacement(c).ok) return c;
+  }
+  return null;
+}
+const DUMB = { aisle: aislePlan, center: centerPlan, split: splitPlan };
+
+// マイペース客は好き勝手に座る(だいたい通路側)
+function roguePlan(g) {
+  if (Math.random() < .6) { const c = aislePlan(g); if (c) return c; }
+  const cs = candidates(g);
+  return cs.length ? pick(cs).cells : null;
+}
+
+// ================= 歩行 =================
+function polyline(pts) {
+  const lens = [0];
+  for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  return { pts, lens, total: lens[lens.length - 1] };
+}
+function posAt(pl, d) {
+  const P = pl.pts;
+  if (d <= 0) return P[0];
+  if (d >= pl.total) return P[P.length - 1];
+  let i = 1; while (pl.lens[i] < d) i++;
+  const t = (d - pl.lens[i - 1]) / ((pl.lens[i] - pl.lens[i - 1]) || 1);
+  return { x: P[i - 1].x + (P[i].x - P[i - 1].x) * t, y: P[i - 1].y + (P[i].y - P[i - 1].y) * t };
+}
+// 入口(または元の席)→ 横の通路 → 縦の通路 → 列に入って席へ
+function routePts(cell, side, from) {
+  const G = S.geo, a = aisleIdx(cell.b, side), ax = G.aisleX[a], ry = G.rowY[cell.r], sx = G.seatX[cell.b][cell.i];
+  const P = [];
+  if (!from) {
+    P.push({ x: G.door.x, y: G.door.y }, { x: G.door.x, y: G.crossY }, { x: ax, y: G.crossY });
+  } else {
+    const fy = G.rowY[from.r], fax = G.aisleX[from.a];
+    P.push({ x: G.seatX[from.b][from.i], y: fy }, { x: fax, y: fy });
+    if (from.a !== a) P.push({ x: fax, y: G.crossY }, { x: ax, y: G.crossY });
+  }
+  P.push({ x: ax, y: ry }, { x: sx, y: ry });
+  return P;
+}
+const spacing = () => S.seatSize * .75;
+const walkSpeed = () => S.cfg.walk * S.seatSize / 40;
+
+function startWalk(g, cells, sides, opts = {}) {
+  // 遠い席の人から先に入る
+  const items = cells.map((c, j) => ({ c, s: sides[j], len: polyline(routePts(c, sides[j], opts.from)).total }))
+                     .sort((a, b) => b.len - a.len);
+  g.target = items.map(o => o.c); g.sides = items.map(o => o.s); g.from = opts.from || null;
+  g.target.forEach(c => S.resv[c.r][c.b][c.i] = g.id);
+  g.state = 'walking'; g.walkD = 0; g.escort = opts.robot || null; g.walkColor = opts.color || PLAYER_COLOR;
+  g.rogueWalk = !!opts.rogue; g.walkType = opts.type || 'player';
+  let base = 0;
+  if (g.escort) {
+    const rb = g.escort, G = S.geo, c0 = g.target[0], ax = G.aisleX[aisleIdx(c0.b, g.sides[0])], ry = G.rowY[c0.r];
+    const here = { x: rb.x, y: rb.y };
+    const pts = g.from ? [here, { x: ax, y: ry }]
+                       : [here, { ...G.door }, { x: G.door.x, y: G.crossY }, { x: ax, y: G.crossY }, { x: ax, y: ry }];
+    rb.route = polyline(pts);
+    base = (g.from ? 0 : polyline(pts.slice(0, 2)).total) + spacing();
+  }
+  g.walkers = g.target.map((c, j) => {
+    const el = div('walker' + (g.rogueWalk ? ' rogue' : ''));
+    el.innerHTML = `<span>${g.faces[j]}</span>`; el.style.display = 'none';
+    if (g.rogueWalk) el.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); Snd.init(); act('rogue', { gid: g.id }); });
+    walkerLayer.append(el);
+    return { el, pl: polyline(routePts(c, g.sides[j], g.from)), off: base + j * spacing(), done: false };
+  });
+  S.dirty = true;
+}
+
+function updateWalk(g, dt) {
+  g.walkD += walkSpeed() * dt;
+  let all = true;
+  for (const w of g.walkers) {
+    const d = g.walkD - w.off;
+    if (d < 0) { w.el.style.display = 'none'; w.vis = false; all = false; continue; }
+    w.el.style.display = '';
+    const p = posAt(w.pl, d);
+    w.vis = true; w.px = p.x; w.py = p.y;
+    w.el.style.transform = `translate3d(${p.x}px,${p.y}px,0) ${STAND}`;
+    if (d >= w.pl.total) w.done = true; else all = false;
+  }
+  if (g.escort) { const p = posAt(g.escort.route, g.walkD); g.escort.x = p.x; g.escort.y = p.y; }
+  if (all) finishWalk(g);
+}
+
+function clearWalk(g) {
+  g.walkers.forEach(w => w.el.remove()); g.walkers = [];
+  g.target.forEach(c => { if (S.resv[c.r][c.b][c.i] === g.id) S.resv[c.r][c.b][c.i] = 0; });
+  const rb = g.escort; g.escort = null; g.rogueWalk = false;
+  if (rb) rb.group = null;
+  S.dirty = true;
+  return rb;
+}
+
+function finishWalk(g, silent) {
+  const type = g.walkType, wasRogue = g.rogueWalk;
+  const rb = clearWalk(g);
+  seatGroup(g, g.target, silent);
+  if (silent) return;
+  const p = cellsCenter(g.seats);
+  if (rb) { rb.state = 'return'; rb.seatedCount++; say(rb, pick(LINES[type] || LINES.smart), 1.8); }
+  if (wasRogue) fx(p.x, p.y - 22, '🙉 勝手に座った！', 'meh');
+  if (g.fixing) {
+    g.fixing = false;
+    if (!discontent(g)) { addScore(20); S.stats.fixes++; fx(p.x, p.y - 22, '直した！ +20', 'good'); }
+  }
+}
+
+function stopRogue(g, pl = 0) {
+  if (!S.running || S.paused || g.state !== 'walking' || !g.rogueWalk) return;
+  const p = cellsCenter([g.target[0]]);
+  clearWalk(g);
+  g.rogue = false;
+  if (S.hands[pl]) releaseHeld(pl);
+  g.state = 'held'; g.from = null; g.origSeats = null; g.fixing = false;
+  S.hands[pl] = g; updateChip();
+  addScore(10); fx(p.x, p.y - 22, 'お客様、ご案内します！ +10', 'good'); Snd.stop();
+}
+
+// ================= ロボット =================
+function say(rb, text, sec) {
+  rb.bubbleEl.textContent = text; rb.bubbleEl.classList.add('show'); rb.bubbleT = sec;
+}
+
+function tryWork(rb) {
+  const q = S.queue.filter(g => !g.rogue);   // マイペース客はロボの言うことを聞かない
+  if (q.length) {
+    const dumbP = Math.min(.85, S.cfg.dumb * rb.iq);
+    if (Math.random() < dumbP) {
+      const g = q[0];
+      for (const t of shuffle(g.size >= 2 ? ['aisle', 'center', 'split'] : ['aisle', 'center'])) {
+        const cells = DUMB[t](g);
+        if (cells) { escort(rb, g, cells, t); return; }
+      }
+    }
+    for (const g of q) {
+      const cells = smartPlan(g);
+      if (cells) { escort(rb, g, cells, 'smart'); return; }
+    }
+    if (rb.bubbleT <= 0 && Math.random() < .35) say(rb, pick(LINES.noseat), 2);
+    rb.cooldown = 1.2;
+    return;
+  }
+  // 暇なロボは「おせっかい」で座っているお客様を勝手に動かし始める
+  if (S.cfg.meddle && Math.random() < S.cfg.meddle * rb.iq) {
+    const cands = S.groups.filter(g => g.state === 'seated' && !discontent(g) && canLeave(g) && !S.robots.some(o => o.meddleTarget === g));
+    if (cands.length) {
+      rb.meddleTarget = pick(cands); rb.state = 'toMeddle'; rb.dumbCount++; S.stats.dumb++;
+      rb.el.classList.add('meddling'); say(rb, 'もっといい席がありますよ！', 1.5);
+      Snd.robot(); S.dirty = true; return;
+    }
+  }
+  rb.cooldown = .5;
+}
+
+function escort(rb, g, cells, type) {
+  const chk = checkPlacement(cells);
+  if (!chk.ok) { rb.cooldown = .5; return; }
+  removeFromQueue(g);
+  startWalk(g, cells, chk.sides, { robot: rb, color: rb.color, type });
+  rb.group = g; rb.planType = type; rb.state = 'escort';
+  if (type !== 'smart') { rb.dumbCount++; S.stats.dumb++; }
+  Snd.robot();
+}
+
+// 座っているグループが通路まで出られるか? 出られるなら出口側の情報を返す
+function exitInfo(g) {
+  const own = new Set(g.seats.map(KC));
+  let info = null;
+  for (const c of g.seats) {
+    const s = reachSide(c.r, c.b, c.i, own, null);
+    if (!s) return null;
+    if (!info) info = { r: c.r, b: c.b, i: c.i, a: aisleIdx(c.b, s) };
+  }
+  return info;
+}
+const canLeave = g => !!exitInfo(g);
+
+function meddleArrive(rb) {
+  const g = rb.meddleTarget; rb.meddleTarget = null; rb.el.classList.remove('meddling');
+  const from = g && g.state === 'seated' ? exitInfo(g) : null;
+  if (!from) { rb.state = 'return'; S.dirty = true; return; }
+  g.origSeats = g.seats.map(c => ({ ...c }));
+  unseat(g);
+  const cells = (g.size >= 2 && splitPlan(g)) || aislePlan(g) || centerPlan(g);
+  const chk = cells && checkPlacement(cells);
+  if (!chk || !chk.ok) { seatGroup(g, g.origSeats, true); say(rb, 'やっぱりそのままで…', 1.2); rb.state = 'return'; return; }
+  g.meddled = true;
+  startWalk(g, cells, chk.sides, { robot: rb, from, color: rb.color, type: 'meddle' });
+  rb.group = g; rb.planType = 'meddle'; rb.state = 'escort';
+  Snd.robot();
+}
+
+// 止められたグループは元の席(おせっかい時)かロビーへ戻る
+function returnGroup(g) {
+  if (g.meddled && g.origSeats && checkPlacement(g.origSeats).ok) seatGroup(g, g.origSeats, true);
+  else toQueueFront(g);
+}
+
+function clickRobot(rb) {
+  if (!S.running || S.paused) return;
+  const p = { x: rb.x, y: rb.y - 34 };
+  if (rb.state === 'escort' && rb.group) {
+    const g = rb.group, dumb = rb.planType !== 'smart';
+    clearWalk(g); returnGroup(g); stun(rb);
+    if (dumb) { addScore(30); S.stats.blocks++; fx(p.x, p.y, 'ナイス阻止！ +30', 'good'); Snd.stop(); }
+    else { fx(p.x, p.y, '今のは正しかったのに…', 'meh'); Snd.bad(); }
+  } else if (rb.state === 'toMeddle') {
+    rb.meddleTarget = null; rb.el.classList.remove('meddling'); stun(rb);
+    addScore(30); S.stats.blocks++; fx(p.x, p.y, 'おせっかい阻止！ +30', 'good'); Snd.stop();
+  } else if (rb.state === 'idle' || rb.state === 'return') {
+    say(rb, pick(LINES.idle), 1.2); Snd.robot();
+  }
+  S.dirty = true;
+}
+
+function stun(rb) {
+  rb.state = 'stunned'; rb.stunT = 1.3; rb.group = null; rb.el.classList.add('stunned'); say(rb, pick(LINES.stopped), 1.3);
+}
+
+function fly(rb, tx, ty, dt, mult = 1) {
+  const sp = walkSpeed() * 1.3 * mult * dt;
+  const dx = tx - rb.x, dy = ty - rb.y, d = Math.hypot(dx, dy);
+  if (d <= Math.max(sp, .5)) { rb.x = tx; rb.y = ty; return true; }
+  rb.x += dx / d * sp; rb.y += dy / d * sp; return false;
+}
+
+function updateRobot(rb, dt) {
+  if (rb.bubbleT > 0) { rb.bubbleT -= dt; if (rb.bubbleT <= 0) rb.bubbleEl.classList.remove('show'); }
+  switch (rb.state) {
+    case 'idle': {
+      const h = localCenter(rb.slot); fly(rb, h.x, h.y, dt, 1.5);
+      rb.cooldown -= dt; if (rb.cooldown <= 0) tryWork(rb);
+      break;
+    }
+    case 'escort':   // 位置はグループの歩行に合わせて updateWalk で動かす
+      if (!rb.group) rb.state = 'return';
+      break;
+    case 'toMeddle': {
+      const g = rb.meddleTarget;
+      if (!g || g.state !== 'seated') { rb.meddleTarget = null; rb.el.classList.remove('meddling'); rb.state = 'return'; S.dirty = true; break; }
+      const t = cellsCenter(g.seats);
+      if (fly(rb, t.x, t.y, dt, .8)) meddleArrive(rb);
+      break;
+    }
+    case 'return': {
+      const h = localCenter(rb.slot);
+      if (fly(rb, h.x, h.y, dt, 1.6)) { rb.state = 'idle'; rb.cooldown = .6; }
+      break;
+    }
+    case 'stunned':
+      rb.stunT -= dt;
+      if (rb.stunT <= 0) { rb.el.classList.remove('stunned'); rb.state = 'return'; }
+      break;
+  }
+}
+
+function makeRobots() {
+  robotLayer.innerHTML = ''; dockEl.innerHTML = ''; S.robots = [];
+  for (let n = 0; n < S.cfg.robots; n++) {
+    const d = ROBOTS[n % ROBOTS.length];
+    const slot = div('dockSlot'); dockEl.append(slot);
+    const el = div('robot'); el.style.setProperty('--rc', d.color);
+    el.innerHTML = `<div class="bubble"></div><div class="body">🤖</div><div class="name">${d.name}</div>`;
+    robotLayer.append(el);
+    const rb = { ...d, el, slot, bubbleEl: el.querySelector('.bubble'),
+                 state: 'idle', x: 0, y: 0, cooldown: 1.5 + n * .8, group: null, planType: null, route: null,
+                 bubbleT: 0, stunT: 0, meddleTarget: null, dumbCount: 0, seatedCount: 0 };
+    el.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); Snd.init(); act('robot', { i: n }); });
+    if (NET.role === 'guest') el.classList.add('net');
+    S.robots.push(rb);
+  }
+  S.robots.forEach(rb => { const h = localCenter(rb.slot); rb.x = h.x; rb.y = h.y; placeRobotEl(rb); });
+}
+
+function placeRobotEl(rb) {
+  rb.el.style.transform = `translate3d(${rb.x}px,${rb.y}px,0) ${STAND}`;
+}
+
+// ================= プレイヤー操作 =================
+// pl … 操作したプレイヤー(0 = ホスト/1人プレイ、1 = 参加者)
+function holdFromQueue(g, pl = 0) {
+  if (S.hands[pl]) releaseHeld(pl);
+  removeFromQueue(g);
+  g.state = 'held'; g.origSeats = null; g.from = null; g.fixing = false;
+  S.hands[pl] = g; updateChip(); Snd.pick();
+}
+
+function pickUpSeated(g, pl = 0) {
+  if (S.hands[pl]) releaseHeld(pl);
+  const from = exitInfo(g);
+  if (!from) {
+    Snd.bad(); const p = cellsCenter(g.seats);
+    fx(p.x, p.y - 22, '🔒 手前の人がいて出られません', 'meh'); return;
+  }
+  S.robots.forEach(rb => { if (rb.meddleTarget === g) { rb.meddleTarget = null; rb.el.classList.remove('meddling'); rb.state = 'return'; } });
+  g.fixing = discontent(g);
+  g.origSeats = g.seats.map(c => ({ ...c })); g.from = from;
+  unseat(g); g.state = 'held';
+  S.hands[pl] = g; updateChip(); Snd.pick();
+}
+
+function releaseHeld(pl = 0) {
+  const g = S.hands[pl]; if (!g) return;
+  S.hands[pl] = null; g.fixing = false;
+  if (pl === S.me) S.preview = null; else S.partnerPv = null;
+  if (g.origSeats && checkPlacement(g.origSeats).ok) seatGroup(g, g.origSeats, true);
+  else toQueueFront(g);
+  updateChip(); S.dirty = true;
+}
+
+function placeHeld(cells, sides, pl = 0) {
+  const g = S.hands[pl]; S.hands[pl] = null;
+  if (pl === S.me) S.preview = null; else S.partnerPv = null;
+  g.origSeats = null;
+  startWalk(g, cells, sides, { from: g.from, color: PLAYER_COLORS[pl], type: 'player' });
+  Snd.pick(); updateChip();
+}
+
+function computePreview(r, b, i) {
+  const g = myHand(); if (!g) { S.preview = null; return; }
+  const L = S.grid[r][b].length, k = g.size, anchor = K(r, b, i);
+  S.dirty = true;
+  if (k > L) { S.preview = { anchor, cells: [{ r, b, i }], ok: false, reason: 'ブロックに入りきりません' }; updateChip(); return; }
+  // カーソル位置を含む並び席のうち、案内できて中央寄りのものにスナップ
+  const center = Math.max(0, Math.min(L - k, i - Math.floor((k - 1) / 2)));
+  let best = null, bd = 1e9;
+  for (let st = Math.max(0, i - k + 1); st <= Math.min(i, L - k); st++) {
+    const chk = checkPlacement(range(r, b, st, k));
+    if (chk.ok && Math.abs(st - center) < bd) { bd = Math.abs(st - center); best = { st, chk }; }
+  }
+  if (best) S.preview = { anchor, cells: range(r, b, best.st, k), ok: true, sides: best.chk.sides };
+  else {
+    const cells = range(r, b, center, k);
+    S.preview = { anchor, cells, ok: false, reason: checkPlacement(cells).reason };
+  }
+  updateChip(); sendHover();
+}
+
+// 参加者は自分の案内先を相方(ホスト)に見せる。ホストの分はスナップショットで送る
+function sendHover() {
+  if (NET.role === 'guest') act('hover', { cells: S.preview ? S.preview.cells : null });
+}
+
+function updateChip() {
+  const g = myHand();
+  if (g) {
+    const tag = g.pref ? ` <span class="tag">${PREFS[g.pref].icon}${PREFS[g.pref].label}</span>` : '';
+    const why = S.preview && !S.preview.ok ? `<small>${S.preview.reason}</small>` : '';
+    chipEl.innerHTML = g.faces.join('') + tag + why; chipEl.style.display = 'block';
+  } else chipEl.style.display = 'none';
+  S.dirty = true;
+}
+
+const seatOf = e => e.target.closest && e.target.closest('.seat');
+theaterEl.addEventListener('pointerdown', e => { S.lastPointer = e.pointerType || 'mouse'; });
+theaterEl.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse' || !myHand()) return;
+  const s = seatOf(e);
+  if (s) { if (!S.preview || S.preview.anchor !== K(+s.dataset.r, +s.dataset.b, +s.dataset.i)) computePreview(+s.dataset.r, +s.dataset.b, +s.dataset.i); }
+  else if (S.preview) { S.preview = null; updateChip(); sendHover(); }
+});
+theaterEl.addEventListener('pointerleave', () => { if (S.lastPointer === 'mouse' && S.preview) { S.preview = null; updateChip(); sendHover(); } });
+theaterEl.addEventListener('click', e => {
+  Snd.init();
+  if (!S.running || S.paused) return;
+  const s = seatOf(e); if (!s) return;
+  const r = +s.dataset.r, b = +s.dataset.b, i = +s.dataset.i;
+  if (myHand()) {
+    if (S.lastPointer !== 'mouse' && (!S.preview || S.preview.anchor !== K(r, b, i))) { computePreview(r, b, i); return; }
+    computePreview(r, b, i);
+    if (S.preview.ok) { const cells = S.preview.cells; S.preview = null; act('place', { cells }); }
+    else { Snd.raw.bad(); const p = localCenter(s); fxLocal(p.x, p.y, S.preview.reason, 'meh'); }
+  } else if (S.grid[r][b][i]) act('pick', { r, b, i });
+});
+$('#lobby').addEventListener('click', e => { if (myHand() && !e.target.closest('.card')) act('release'); });
+floorEl.addEventListener('contextmenu', e => { e.preventDefault(); act('release'); });
+const moveChip = e => { chipEl.style.transform = `translate(${e.clientX + 14}px,${e.clientY + 14}px)`; };
+document.addEventListener('pointermove', moveChip);
+document.addEventListener('pointerdown', moveChip);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') act('release');
+  if (e.key === 'p' || e.key === 'P') togglePause();
+});
+window.addEventListener('resize', layout);
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.running && !S.paused && NET.role === 'solo') togglePause(); });
+
+// ================= 描画 =================
+function renderSeats() {
+  if (!S.cfg) return;
+  const resv = new Map();
+  S.groups.forEach(g => { if (g.state === 'walking') g.target.forEach((c, j) => resv.set(KC(c), { color: g.walkColor, face: g.faces[j] })); });
+  const tgt = new Map();
+  S.robots.forEach(rb => { if (rb.meddleTarget) rb.meddleTarget.seats.forEach(c => tgt.set(KC(c), rb.color)); });
+  const pv = new Map();
+  if (S.preview && myHand()) S.preview.cells.forEach((c, j) => pv.set(KC(c), j));
+  const ppv = new Set((S.partnerPv || []).map(KC));
+  const unhappy = new Map();
+  S.groups.forEach(g => {
+    if (g.state !== 'seated') return;
+    if (!together(g)) unhappy.set(g.id, g.sepTime > SEP_LIMIT * .6 ? 'sep urgent' : 'sep');
+    else if (!prefOK(g, g.seats)) unhappy.set(g.id, g.prefTime > PREF_LIMIT * .6 ? 'unhappy urgent' : 'unhappy');
+  });
+  const held = myHand(), pcolor = PLAYER_COLORS[1 - S.me];
+
+  let empty = 0, locked = 0;
+  S.seatEls.forEach((row, r) => row.forEach((blk, b) => blk.forEach((el, i) => {
+    const gid = S.grid[r][b][i], k = K(r, b, i);
+    let cls = 'seat', html = '';
+    if (gid) {
+      const g = S.groupMap.get(gid);
+      const j = g.seats.findIndex(c => c.r === r && c.b === b && c.i === i);
+      cls += ' occ'; html = `<span class="p">${g.faces[j] || ''}</span>`;
+      el.style.setProperty('--h', g.hue);
+      if (unhappy.has(gid)) cls += ' ' + unhappy.get(gid);
+    } else if (!S.resv[r][b][i]) {
+      empty++;
+      if (!reachSide(r, b, i, null, null)) { locked++; cls += ' stranded'; html = '<span class="lock">🔒</span>'; }
+      else if (held && held.pref && prefOK(held, [{ r, b, i }])) cls += ' prefzone';
+    }
+    if (pv.has(k)) {
+      cls += S.preview.ok ? ' pv-ok' : ' pv-bad';
+      if (!gid) html = `<span class="p ghost">${held.faces[pv.get(k)]}</span>`;
+    } else if (resv.has(k)) {
+      const v = resv.get(k); cls += ' resv'; el.style.setProperty('--rc', v.color);
+      html = `<span class="p ghost">${v.face}</span>`;
+    }
+    if (tgt.has(k)) { cls += ' targeted'; el.style.setProperty('--rc', tgt.get(k)); }
+    else if (ppv.has(k) && !pv.has(k)) { cls += ' partner'; el.style.setProperty('--pc', pcolor); }
+    if (el.className !== cls) el.className = cls;
+    if (el._h !== html) { el.innerHTML = html; el._h = html; }
+  })));
+  S.emptyCount = empty; S.lockCount = locked; S.sepCount = unhappy.size;
+}
+
+const hudCache = {};
+function setHud(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
+function updateHUD() {
+  setHud('#hudShow', S.show);
+  setHud('#hudTime', S.cfg ? Math.ceil(S.time) : '--');
+  $('#hudTime').classList.toggle('warn', S.running && S.time < 10);
+  setHud('#hudEmpty', S.emptyCount);
+  setHud('#hudLock', S.lockCount);
+  setHud('#hudSep', S.sepCount);
+  setHud('#hudScore', S.score);
+  setHud('#hudRep', '★'.repeat(S.rep) + '☆'.repeat(Math.max(0, 5 - S.rep)));
+  if (NET.role !== 'solo') {
+    const mate = S.hands[1 - S.me];
+    const link = NET.role === 'guest' ? '' : NET.conn && NET.conn.open ? ' 相方あり' : ' 相方待ち';
+    setHud('#hudNet', `👥 部屋${NET.code}${link}` + (mate ? ` ／ 相方: ${mate.faces.join('')}` : ''));
+  }
+}
+
+// 床の上に立つ文字(床の座標で指定)
+function fx(x, y, text, kind = 'meh') {
+  if (netOn()) NET.ev.push(['f', Math.round(x), Math.round(y), text, kind]);
+  fxLocal(x, y, text, kind);
+}
+function fxLocal(x, y, text, kind = 'meh') {
+  const a = div('fxAnchor'), w = planeEl.offsetWidth;
+  a.style.transform = `translate3d(${Math.max(90, Math.min(w - 90, x))}px,${y}px,0) ${STAND}`;
+  a.append(div('fx ' + kind, text));
+  fxPlane.append(a); setTimeout(() => a.remove(), 1400);
+}
+// 平面のUI(ロビー)の上に出す文字。el を渡すとその位置、座標を渡すとそこ
+function fxFlatAt(el, text, kind = 'meh', pos) {
+  if (netOn()) NET.ev.push(['F', el && el.dataset.gid ? +el.dataset.gid : 0, text, kind, pos ? [pos.x / floorEl.clientWidth, pos.y] : null]);
+  if (!pos && !(el && el.isConnected)) pos = { x: floorEl.clientWidth / 2, y: floorEl.clientHeight - 70 };
+  const p = pos || relCenter(el), d = div('fx ' + kind, text), w = floorEl.clientWidth;
+  d.style.left = Math.max(90, Math.min(w - 90, p.x)) + 'px'; d.style.top = Math.max(20, p.y - 20) + 'px';
+  fxFlat.append(d); setTimeout(() => d.remove(), 1400);
+}
+
+function addScore(n) { S.score += n; }
+
+// ================= 進行 =================
+function update(dt) {
+  S.elapsed += dt; S.time -= dt;
+
+  while (S.arrivals.length && S.arrivals[0].t <= S.elapsed) {
+    const g = S.arrivals.shift().g;
+    g.state = 'queue'; S.queue.push(g);
+    g.card.classList.add('new'); setTimeout(() => g.card.classList.remove('new'), 400);
+    renderQueue(); Snd.door();
+  }
+
+  for (const g of [...S.queue]) {
+    if (g.rogue) {
+      // マイペース客:しびれを切らすと勝手に席へ向かう
+      g.selfT -= dt;
+      g.barEl.style.width = Math.max(0, g.selfT / g.selfMax * 100) + '%';
+      if (g.selfT <= 0) {
+        const cells = roguePlan(g), chk = cells && checkPlacement(cells);
+        if (chk && chk.ok) {
+          fxFlatAt(g.card, '🙉 勝手に行っちゃった！', 'bad');
+          removeFromQueue(g);
+          startWalk(g, cells, chk.sides, { color: ROGUE_COLOR, rogue: true, type: 'rogue' });
+          Snd.rogue();
+        } else g.selfT = 2;
+      }
+      continue;
+    }
+    g.patience -= dt;
+    const f = Math.max(0, g.patience / g.maxPatience);
+    g.barEl.style.width = (f * 100) + '%';
+    g.barEl.style.background = f > .5 ? 'var(--ok)' : f > .25 ? 'var(--warn)' : 'var(--bad)';
+    g.card.classList.toggle('low', f < .25);
+    if (g.patience <= 0) { groupLeaves(g, '待ちくたびれて帰った…'); if (!S.running) return; }
+  }
+
+  for (const g of S.groups) if (g.state === 'walking') updateWalk(g, dt);
+
+  for (const g of S.groups) {
+    if (g.state !== 'seated') continue;
+    if (!together(g)) {
+      const before = g.sepTime; g.sepTime += dt;
+      if (before <= SEP_LIMIT * .6 && g.sepTime > SEP_LIMIT * .6) S.dirty = true;
+      if (g.sepTime >= SEP_LIMIT) { groupLeaves(g, 'バラバラにされて怒って帰った！'); if (!S.running) return; }
+    } else if (!prefOK(g, g.seats)) {
+      const before = g.prefTime; g.prefTime += dt;
+      if (before <= PREF_LIMIT * .6 && g.prefTime > PREF_LIMIT * .6) S.dirty = true;
+      if (g.prefTime >= PREF_LIMIT) { groupLeaves(g, `${PREFS[g.pref].label}だったのに！と帰った`); if (!S.running) return; }
+    }
+  }
+
+  for (const rb of S.robots) updateRobot(rb, dt);
+
+  if (S.time <= 0) { S.time = 0; endShow(false); return; }
+  const allDone = !S.arrivals.length && !S.queue.length && !S.hands.some(Boolean)
+               && !S.groups.some(g => g.state === 'walking' || (g.state === 'seated' && discontent(g)));
+  if (allDone) endShow(true);
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
+  if (NET.role !== 'guest' && S.running && !S.paused) update(dt);
+  if (S.dirty) { renderSeats(); S.dirty = false; }
+  if (netOn() && S.stats && now - NET.lastSend > 66) { NET.lastSend = now; NET.conn.send(snapshot()); }
+  S.robots.forEach(placeRobotEl);
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function startShow() {
+  S.cfg = levelCfg(S.show);
+  if (NET.role === 'host') {
+    // 2人プレイは手が2倍なので少し難しくする
+    const c = S.cfg;
+    c.dumb = Math.min(.85, c.dumb + .08); if (c.rogue) c.rogue = Math.min(.4, c.rogue + .08);
+    c.time = Math.round(c.time * .85); c.patience *= .9;
+  }
+  S.groups = []; S.groupMap = new Map(); S.queue = []; S.hands = [null, null]; S.preview = null; S.partnerPv = null;
+  S.stats = { blocks: 0, fixes: 0, left: 0, dumb: 0 };
+  updateChip(); fxPlane.innerHTML = ''; fxFlat.innerHTML = ''; walkerLayer.innerHTML = '';
+  buildTheater();
+  const gs = makeGroups(); S.groups = gs;
+  const span = S.cfg.time * .62;
+  S.arrivals = gs.map((g, n) => ({ g, t: n < 3 ? n * .6 : 2 + (n - 3) / Math.max(1, gs.length - 3) * (span - 2) + (Math.random() - .5) * 1.2 }))
+                 .sort((a, b) => a.t - b.t);
+  S.time = S.cfg.time; S.elapsed = 0;
+  renderQueue();
+  makeRobots();
+  S.dirty = true;
+  sendSetup();
+  showIntro();
+}
+
+function showIntro() {
+  const n = S.show, c = S.cfg, seats = c.rows * c.blocks.reduce((a, b) => a + b, 0);
+  const news = {
+    1: 'お客様は<b>入口から通路を歩いて</b>席に向かいます。<b>通路側が埋まると奥には入れません</b>(🔒)。<b>壁側から詰めて</b>案内しよう！<br>相棒は<b>ロボ太</b>。わりと優秀…なはず。',
+    2: '<b>ガチャ子</b>が加入！ そして<b>希望のあるお客様</b>が来場します。<br>🚪<b>後ろ希望</b>(子連れ・出口に近い後ろ2列)／⭐<b>前列希望</b>(前2列)。希望と違う席だと😒不満がたまって帰ってしまいます。<br>お客様を持つと、希望に合う席が金色の枠で光ります。',
+    3: '通路が2本に！ 真ん中のブロックは両側から入れます。<br>🙉<b>マイペース客</b>が登場…案内を待たずに勝手に座りに行きます。<b>歩いているところをクリック</b>で呼び止めよう。<br>🦯<b>通路側希望</b>のお客様も来場します。',
+    4: '<b>ポンコ2号</b>が加入…。さらにロボたちが<b>「おせっかい」</b>を覚えた！ 暇になると座っているお客様を勝手に動かします。❗マークのロボに注意。',
+    5: '客席が広くなった！ お客様もロボも歩くのが速くなっています。',
+    6: '<b>メカ次郎</b>が加入！ ここからはロボ4台体制。',
+  };
+  $('#introTitle').textContent = `第${n}公演`;
+  $('#introBody').innerHTML = `
+    <p>${news[n] || 'マイペース客もロボのポンコツ度もさらに増えている…！ 目を離さないで。'}</p>
+    <ul>
+      <li>客席:${c.rows}列 × [${c.blocks.join(' | ')}] = <b>${seats}席</b></li>
+      <li>案内ロボ:${S.robots.map(r => `<span style="color:${r.color}">${r.name}</span>`).join('、')}</li>
+      <li>開演まで:<b>${c.time}秒</b></li>
+    </ul>`;
+  ovShow('ovIntro');
+}
+
+function endShow(early) {
+  if (!S.running) return;
+  S.running = false;
+  S.hands = [null, null]; S.preview = null; S.partnerPv = null; updateChip();
+  // 開演ベル!歩いている人は駆け込みで着席
+  S.groups.forEach(g => { if (g.state === 'walking') finishWalk(g, true); });
+  S.robots.forEach(rb => { rb.group = null; rb.meddleTarget = null; rb.state = 'idle'; rb.el.classList.remove('meddling', 'stunned'); });
+  renderSeats();
+
+  const cap = S.cfg.rows * S.cfg.blocks.reduce((a, b) => a + b, 0);
+  const empty = S.emptyCount, seated = cap - empty;
+  const seatedGroups = S.groups.filter(g => g.state === 'seated');
+  const sep = seatedGroups.filter(g => !together(g)).length;
+  const unhappy = seatedGroups.filter(g => together(g) && !prefOK(g, g.seats)).length;
+  const unseated = S.groups.filter(g => ['queue', 'held', 'pending'].includes(g.state)).length;
+  const rows = [
+    ['ご案内したお客様', `${seated}名 × 10`, seated * 10],
+    ['空席', `${empty}席 × −8`, -empty * 8],
+    ['バラバラのグループ', `${sep}組 × −40`, -sep * 40],
+    ['希望と違う席のグループ', `${unhappy}組 × −30`, -unhappy * 30],
+  ];
+  if (early) rows.push(['早期完了ボーナス', `残り${Math.ceil(S.time)}秒 × 5`, Math.ceil(S.time) * 5]);
+  if (empty === 0) rows.push(['🎉 満席ボーナス', '評判 ★+1', 300]);
+  if (S.stats.blocks) rows.push(['(ロボ阻止ボーナス 獲得済み)', `${S.stats.blocks}回`, null]);
+  if (S.stats.fixes) rows.push(['(直したボーナス 獲得済み)', `${S.stats.fixes}回`, null]);
+  const total = rows.reduce((a, r) => a + (r[2] || 0), 0);
+  addScore(total);
+
+  let repNote = '';
+  if (empty === 0) S.rep = Math.min(5, S.rep + 1);
+  const repLoss = Math.min(2, unseated);
+  if (repLoss) { S.rep = Math.max(0, S.rep - repLoss); repNote = `開演に間に合わなかったお客様 ${unseated}組 → 評判 −${repLoss}`; }
+
+  const fill = seated / cap;
+  const rank = fill === 1 && sep + unhappy === 0 ? 'S' : fill >= .95 ? 'A' : fill >= .85 ? 'B' : 'C';
+  $('#resRank').textContent = rank;
+  $('#resTitle').textContent = empty === 0 ? `第${S.show}公演 満員御礼！` : `第${S.show}公演 開演`;
+  $('#resSub').textContent = `着席率 ${Math.round(fill * 100)}%` + (repNote ? ' ／ ' + repNote : '');
+  $('#resTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="${r[2] > 0 ? 'plus' : r[2] < 0 ? 'minus' : ''}">${r[2] == null ? '' : (r[2] > 0 ? '+' : '') + r[2]}</td></tr>`).join('')
+    + `<tr><td><b>今回の獲得</b></td><td></td><td>${total > 0 ? '+' : ''}${total}</td></tr><tr><td><b>合計スコア</b></td><td></td><td>${S.score}</td></tr>`;
+  $('#resRobots').innerHTML = '🤖 ロボ成績:' + S.robots.map(r => `<span style="color:${r.color}">${r.name}</span> 案内${r.seatedCount}組・ポンコツ${r.dumbCount}回`).join(' ／ ');
+  $('#btnNext').textContent = S.rep <= 0 ? '結果を見る' : '次の公演へ';
+  empty === 0 ? Snd.fanfare() : Snd.bell();
+  fxFlatAt(null, empty === 0 ? '🎉 満員御礼！' : '🔔 開演！', 'gold', { x: floorEl.clientWidth / 2, y: 80 });
+  setTimeout(() => { if (!S.running && !S.over) ovShow('ovResult'); }, 900);
+}
+
+function gameOver() {
+  S.running = false; S.over = true;
+  let best = 0;
+  try { best = +localStorage.getItem('seatUsherBest') || 0; if (S.score > best) localStorage.setItem('seatUsherBest', S.score); } catch (e) {}
+  $('#overBody').innerHTML = `第${S.show}公演で案内係をクビになりました。<br>最終スコア:<b style="font-size:22px;color:var(--gold)">${S.score}</b>${S.score > best ? ' 🏆 自己ベスト更新！' : `(ベスト ${best})`}`;
+  ovShow('ovOver');
+  Snd.angry();
+}
+
+function togglePause() {
+  if (NET.role === 'guest') { act('btn', { id: 'btnPause' }); return; }
+  if (!S.running && !S.paused) return;
+  S.paused = !S.paused;
+  S.paused ? ovShow('ovPause') : ovHide('ovPause');
+  last = performance.now();
+}
+
+function newGame() {
+  S.show = 1; S.score = 0; S.rep = 5; S.over = false;
+  startShow();
+}
+
+// ================= 2人プレイ:操作 =================
+// 操作はすべて act() を通す。参加者はホストに送り、ホスト/1人プレイはその場で実行する
+function act(a, d = {}) {
+  if (NET.role === 'guest') { if (NET.conn && NET.conn.open) NET.conn.send({ a, ...d }); return; }
+  doAction(a, d, 0);
+}
+const validCell = c => c && S.grid[c.r] && S.grid[c.r][c.b] && S.grid[c.r][c.b][c.i] !== undefined;
+const BTN_OK = { btnIntro: 'ovIntro', btnNext: 'ovResult', btnRetry: 'ovOver', btnResume: 'ovPause' };
+
+function doAction(a, d, pl) {
+  if (a === 'btn') {
+    if (d.id === 'btnPause') { if (S.running || S.paused) togglePause(); return; }
+    const ov = BTN_OK[d.id];
+    if (ov && $('#' + ov).classList.contains('show')) $('#' + d.id).click();
+    return;
+  }
+  if (a === 'hover') {
+    if (pl === 1) { S.partnerPv = Array.isArray(d.cells) && d.cells.every(validCell) ? d.cells : null; S.dirty = true; }
+    return;
+  }
+  if (!S.running || S.paused) return;
+  switch (a) {
+    case 'hold': { const g = S.groupMap.get(d.gid); if (g && g.state === 'queue') holdFromQueue(g, pl); break; }
+    case 'pick': { if (!validCell(d)) break; const gid = S.grid[d.r][d.b][d.i]; if (gid) pickUpSeated(S.groupMap.get(gid), pl); break; }
+    case 'release': releaseHeld(pl); break;
+    case 'robot': { const rb = S.robots[d.i]; if (rb) clickRobot(rb); break; }
+    case 'rogue': { const g = S.groupMap.get(d.gid); if (g) stopRogue(g, pl); break; }
+    case 'place': {
+      const g = S.hands[pl], cells = d.cells;
+      if (!g || !Array.isArray(cells) || cells.length !== g.size || !cells.every(validCell)) break;
+      const chk = checkPlacement(cells);
+      if (chk.ok) placeHeld(cells.map(c => ({ r: c.r, b: c.b, i: c.i })), chk.sides, pl);
+      else { Snd.bad(); const p = cellsCenter([cells[0]]); fx(p.x, p.y, chk.reason, 'meh'); }
+      break;
+    }
+  }
+}
+
+// ホストのオーバーレイ(公演の紹介・結果など)は参加者の画面にも出す
+function ovShow(id) {
+  $('#' + id).classList.add('show');
+  if (netOn()) NET.ev.push(['o', id, $('#' + id + ' .panel').innerHTML]);
+}
+function ovHide(id) {
+  $('#' + id).classList.remove('show');
+  if (netOn()) NET.ev.push(['h', id]);
+}
+
+// ================= 2人プレイ:ホスト → 参加者 =================
+function sendSetup() {
+  if (!netOn()) return;
+  NET.conn.send({ t: 'c', show: S.show, cfg: S.cfg, code: NET.code,
+    groups: S.groups.map(g => ({ id: g.id, size: g.size, faces: g.faces, hue: g.hue, pref: g.pref, rogue: g.rogue })) });
+  ['ovIntro', 'ovResult', 'ovPause', 'ovOver'].forEach(id => { if ($('#' + id).classList.contains('show')) ovShow(id); });
+}
+
+function snapshot() {
+  const idx = c => S.cellIndex.get(KC(c));
+  const gs = [], wk = [];
+  for (const g of S.groups) {
+    if (!['queue', 'held', 'walking', 'seated'].includes(g.state)) continue;
+    const walking = g.state === 'walking';
+    const frac = g.state !== 'queue' ? 0 : g.rogue ? g.selfT / g.selfMax : g.patience / g.maxPatience;
+    gs.push([g.id, g.state, g.seats.map(idx), walking ? g.target.map(idx) : [], walking ? g.sides : [],
+             walking ? g.walkers.reduce((a, w, j) => a | (w.done ? 1 << j : 0), 0) : 0,
+             walking ? g.walkColor : '', g.rogueWalk ? 1 : 0, Math.round(Math.max(0, frac) * 1000) / 1000,
+             (g.sepTime > SEP_LIMIT * .6 ? 1 : 0) | (g.prefTime > PREF_LIMIT * .6 ? 2 : 0)]);
+    if (walking) g.walkers.forEach((w, j) => { if (w.vis) wk.push([g.id, j, Math.round(w.px), Math.round(w.py)]); });
+  }
+  return {
+    t: 'st', run: S.running, pause: S.paused, over: S.over, sc: S.score, rep: S.rep, tm: Math.round(S.time * 10) / 10,
+    gr: S.cells.map(c => S.grid[c.r][c.b][c.i]), rv: S.cells.map(c => S.resv[c.r][c.b][c.i]),
+    gs, wk, q: S.queue.map(g => g.id), h: S.hands.map(g => g ? g.id : 0), al: S.arrivals.length,
+    pv: S.preview && S.hands[0] ? S.preview.cells.map(idx) : null,
+    rb: S.robots.map(rb => [Math.round(rb.x), Math.round(rb.y), rb.state, rb.bubbleT > 0 ? rb.bubbleEl.textContent : '',
+                            rb.meddleTarget ? rb.meddleTarget.id : 0]),
+    ev: NET.ev.splice(0),
+  };
+}
+
+// ================= 2人プレイ:参加者側 =================
+function setupFromHost(m) {
+  S.show = m.show; S.cfg = m.cfg; NET.code = m.code;
+  S.groups = []; S.groupMap = new Map(); S.queue = []; S.hands = [null, null]; S.preview = null; S.partnerPv = null;
+  S.stats = { blocks: 0, fixes: 0, left: 0, dumb: 0 };
+  fxPlane.innerHTML = ''; fxFlat.innerHTML = ''; walkerLayer.innerHTML = ''; NET.walkers.clear(); NET.qk = '';
+  buildTheater();
+  S.groups = m.groups.map(buildGroup);
+  makeRobots();
+  renderQueue(); updateChip();
+  NET.ready = true;
+  ['ovTitle', 'ovRoom'].forEach(id => $('#' + id).classList.remove('show'));
+  $('#hudNet').style.display = '';
+  layout();
+}
+
+function applyState(m) {
+  if (!NET.ready) return;
+  const cell = k => S.cells[k];
+  S.running = m.run; S.paused = m.pause; S.over = m.over; S.score = m.sc; S.rep = m.rep; S.time = m.tm;
+  m.gr.forEach((v, k) => { const c = S.cells[k]; S.grid[c.r][c.b][c.i] = v; });
+  m.rv.forEach((v, k) => { const c = S.cells[k]; S.resv[c.r][c.b][c.i] = v; });
+  const seen = new Set();
+  for (const [id, st, seats, target, sides, done, col, rw, frac, urg] of m.gs) {
+    const g = S.groupMap.get(id); if (!g) continue;
+    seen.add(id);
+    g.state = st; g.seats = seats.map(cell); g.target = target.map(cell); g.sides = sides;
+    g.walkers = g.target.map((_, j) => ({ done: !!(done >> j & 1) }));
+    g.walkColor = col; g.rogueWalk = !!rw;
+    g.sepTime = urg & 1 ? SEP_LIMIT : 0; g.prefTime = urg & 2 ? PREF_LIMIT : 0;
+    if (st === 'queue') {
+      g.barEl.style.width = (frac * 100) + '%';
+      if (!g.rogue) g.barEl.style.background = frac > .5 ? 'var(--ok)' : frac > .25 ? 'var(--warn)' : 'var(--bad)';
+      g.card.classList.toggle('low', !g.rogue && frac < .25);
+    }
+  }
+  S.groups.forEach(g => { if (!seen.has(g.id) && g.state !== 'pending') g.state = 'left'; });
+  NET.al = m.al; S.arrivals = m.al ? [null] : [];   // renderQueue の「到着待ち」表示用
+  const qk = m.q.join(',');
+  if (qk !== NET.qk) { NET.qk = qk; S.queue = m.q.map(id => S.groupMap.get(id)).filter(Boolean); renderQueue(); }
+  const mine = S.hands[S.me];
+  S.hands = m.h.map(id => id ? S.groupMap.get(id) : null);
+  if (mine !== S.hands[S.me]) { S.preview = null; updateChip(); }
+  S.partnerPv = m.pv ? m.pv.map(cell) : null;
+
+  m.rb.forEach(([x, y, st, bub, mt], i) => {
+    const rb = S.robots[i]; if (!rb) return;
+    rb.x = x; rb.y = y; rb.state = st;
+    rb.el.classList.toggle('stunned', st === 'stunned');
+    rb.el.classList.toggle('meddling', st === 'toMeddle');
+    if (bub) { rb.bubbleEl.textContent = bub; rb.bubbleEl.classList.add('show'); } else rb.bubbleEl.classList.remove('show');
+    rb.meddleTarget = mt ? S.groupMap.get(mt) : null;
+  });
+
+  // 歩いているお客様
+  const keep = new Set();
+  for (const [gid, j, x, y] of m.wk) {
+    const key = gid + ':' + j, g = S.groupMap.get(gid); if (!g) continue;
+    keep.add(key);
+    let el = NET.walkers.get(key);
+    if (!el) {
+      el = div('walker net' + (g.rogueWalk ? ' rogue' : ''));
+      el.innerHTML = `<span>${g.faces[j]}</span>`;
+      if (g.rogueWalk) el.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); Snd.init(); act('rogue', { gid }); });
+      walkerLayer.append(el); NET.walkers.set(key, el);
+    }
+    el.style.transform = `translate3d(${x}px,${y}px,0) ${STAND}`;
+  }
+  for (const [key, el] of NET.walkers) if (!keep.has(key)) { el.remove(); NET.walkers.delete(key); }
+
+  for (const e of m.ev) {
+    if (e[0] === 's') Snd.raw[e[1]] && Snd.raw[e[1]]();
+    else if (e[0] === 'f') fxLocal(e[1], e[2], e[3], e[4]);
+    else if (e[0] === 'F') {
+      const g = S.groupMap.get(e[1]);
+      fxFlatAt(g && g.card.isConnected ? g.card : null, e[2], e[3], e[4] ? { x: e[4][0] * floorEl.clientWidth, y: e[4][1] } : undefined);
+    }
+    else if (e[0] === 'o') { const ov = $('#' + e[1]); ov.querySelector('.panel').innerHTML = e[2]; ov.classList.add('show'); }
+    else if (e[0] === 'h') $('#' + e[1]).classList.remove('show');
+  }
+  S.dirty = true;
+}
+
+// 参加者の画面のオーバーレイのボタンは、ホストに「押した」と伝える
+document.addEventListener('click', e => {
+  if (NET.role !== 'guest') return;
+  const b = e.target.closest('#ovIntro .btn, #ovResult .btn, #ovOver .btn, #ovPause .btn');
+  if (b) { e.stopPropagation(); e.preventDefault(); Snd.init(); act('btn', { id: b.id }); }
+}, true);
+
+// ================= 2人プレイ:部屋を作る・参加する =================
+const PEER_PREFIX = 'manseki-annai-';
+
+function roomStatus(t) { $('#roomStatus').innerHTML = t; }
+
+function hostRoom() {
+  if (!window.Peer) { alert('通信ライブラリを読み込めませんでした。インターネットに接続して再読み込みしてください。'); return; }
+  NET.role = 'host'; S.me = 0;
+  NET.code = String(Math.floor(1000 + Math.random() * 9000));
+  $('#ovTitle').classList.remove('show'); $('#ovRoom').classList.add('show');
+  $('#roomTitle').textContent = '👥 2人で遊ぶ'; $('#roomHost').style.display = '';
+  $('#btnRoomStart').style.display = ''; $('#roomCode').textContent = '----'; $('#qr').innerHTML = '';
+  roomStatus('部屋を準備しています…');
+  const peer = new Peer(PEER_PREFIX + NET.code); NET.peer = peer;
+  peer.on('open', () => {
+    $('#roomCode').textContent = NET.code;
+    const url = location.origin + location.pathname + '?room=' + NET.code;
+    $('#roomUrl').textContent = url;
+    if (window.QRCode && location.protocol.startsWith('http')) new QRCode($('#qr'), { text: url, width: 150, height: 150 });
+    const h = location.hostname;
+    $('#roomWarn').innerHTML = location.protocol === 'file:'
+      ? '⚠ ファイルを直接開いているので、スマホからはこのURLで開けません。<br>Webサーバーで公開するか、タイトル画面で部屋番号を入力して参加してください。'
+      : (h === 'localhost' || h === '127.0.0.1') ? '⚠ localhost はスマホから開けません。URLの localhost をこのPCのIPアドレスに変えて開いてください。' : '';
+    roomStatus('相方の参加を待っています…(先に始めても、あとから参加できます)');
+    $('#hudNet').style.display = '';
+  });
+  peer.on('connection', conn => {
+    if (NET.conn && NET.conn.open) { conn.on('open', () => conn.close()); return; }
+    NET.conn = conn;
+    conn.on('open', () => {
+      roomStatus('🎉 相方が参加しました！');
+      Snd.raw.fanfare();
+      if (S.stats) { sendSetup(); fx(planeEl.offsetWidth / 2, S.geo.crossY, '👥 相方が参加しました！', 'good'); }
+    });
+    conn.on('data', d => { if (d && d.a) doAction(d.a, d, 1); });
+    conn.on('close', () => {
+      if (NET.conn !== conn) return;
+      NET.conn = null; releaseHeld(1); S.partnerPv = null; S.dirty = true;
+      roomStatus('相方が退出しました。もう一度参加を待っています…');
+      if (S.stats) fxLocal(planeEl.offsetWidth / 2, S.geo.crossY, '👋 相方が退出しました', 'meh');
+    });
+  });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id') { peer.destroy(); hostRoom(); return; }   // 番号がかぶったら取り直す
+    roomStatus('⚠ 通信エラー:' + (e.type || e.message) + '<br>インターネット接続を確認してください。');
+  });
+}
+
+function joinRoom(code) {
+  code = String(code || '').replace(/\D/g, '');
+  if (code.length !== 4) { alert('4桁の部屋番号を入力してください'); return; }
+  if (!window.Peer) { alert('通信ライブラリを読み込めませんでした。インターネットに接続して再読み込みしてください。'); return; }
+  NET.role = 'guest'; S.me = 1; NET.code = code;
+  $('#ovTitle').classList.remove('show'); $('#ovRoom').classList.add('show');
+  $('#roomTitle').textContent = `👥 部屋 ${code} に参加`; $('#roomHost').style.display = 'none';
+  $('#btnRoomStart').style.display = 'none';
+  roomStatus('接続しています…');
+  const peer = new Peer(); NET.peer = peer;
+  peer.on('open', () => {
+    const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
+    NET.conn = conn;
+    conn.on('open', () => roomStatus('✅ 接続しました！ ホストが開場するのを待っています…'));
+    conn.on('data', m => { if (m.t === 'c') setupFromHost(m); else if (m.t === 'st') applyState(m); });
+    conn.on('close', () => {
+      NET.ready = false; S.running = false;
+      document.querySelectorAll('.overlay').forEach(o => o.classList.remove('show'));
+      $('#ovRoom').classList.add('show'); $('#btnRoomCancel').textContent = 'タイトルに戻る';
+      roomStatus('⚠ ホストとの接続が切れました');
+    });
+  });
+  peer.on('error', e => {
+    roomStatus(e.type === 'peer-unavailable' ? '⚠ その部屋番号は見つかりませんでした。番号を確認してね。' : '⚠ 通信エラー:' + (e.type || e.message));
+  });
+}
+
+// ================= ボタン =================
+$('#btnStart').onclick = () => { Snd.init(); $('#ovTitle').classList.remove('show'); newGame(); };
+$('#btnHost').onclick = () => { Snd.init(); hostRoom(); };
+$('#btnJoin').onclick = () => { Snd.init(); joinRoom($('#joinCode').value); };
+$('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin').click(); });
+$('#btnRoomStart').onclick = () => { Snd.init(); $('#ovRoom').classList.remove('show'); newGame(); };
+$('#btnRoomCancel').onclick = () => {
+  if (NET.role === 'guest' || S.stats) { location.href = location.pathname; return; }   // 参加者・ゲーム後は読み直して初期状態へ
+  if (NET.peer) NET.peer.destroy();
+  NET.role = 'solo'; NET.conn = null; NET.peer = null; $('#hudNet').style.display = 'none';
+  $('#ovRoom').classList.remove('show'); $('#ovTitle').classList.add('show');
+};
+$('#btnIntro').onclick = () => { Snd.init(); ovHide('ovIntro'); layout(); S.running = true; last = performance.now(); Snd.bell(); };
+$('#btnNext').onclick = () => {
+  ovHide('ovResult');
+  if (S.rep <= 0) { gameOver(); return; }
+  S.show++; startShow();
+};
+$('#btnRetry').onclick = () => { ovHide('ovOver'); newGame(); };
+$('#btnPause').onclick = togglePause;
+$('#btnResume').onclick = togglePause;
+$('#btnMute').onclick = () => { Snd.on = !Snd.on; $('#btnMute').textContent = Snd.on ? '🔊' : '🔇'; };
+
+try { const b = +localStorage.getItem('seatUsherBest'); if (b) $('#bestLine').textContent = `🏆 自己ベスト:${b}`; } catch (e) {}
+
+// タイトル画面の背景用に第1公演の客席を表示しておく
+S.cfg = levelCfg(1); buildTheater(); renderQueue();
+requestAnimationFrame(loop);
+
+// URL に ?room=1234 があれば、その部屋に参加する(QRコードから来た人)
+const roomParam = new URLSearchParams(location.search).get('room');
+if (roomParam) {
+  $('#joinCode').value = roomParam;
+  const tryJoin = (n = 0) => window.Peer ? joinRoom(roomParam) : n < 50 ? setTimeout(() => tryJoin(n + 1), 100) : joinRoom(roomParam);
+  tryJoin();
+}
+</script>
+</body>
+</html>
